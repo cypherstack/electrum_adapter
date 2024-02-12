@@ -1,14 +1,18 @@
-import 'package:test/test.dart';
 import 'package:electrum_adapter/electrum_adapter.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('subscriptions', () {
     late FiroElectrumClient client;
     setUp(() async {
-      client =
-          await FiroElectrumClient.connect('testnet.rvn.rocks', port: 50002);
+      client = await FiroElectrumClient.connect(
+          host: 'firo.stackwallet.com', port: 50002);
     });
 
+    // TODO block header subscription.
+
+    /*
+    // Original Ravencoin tests:
     test('getMeta', () async {
       var results = await client.getMeta('MOONTREE');
       expect(
@@ -34,5 +38,6 @@ void main() {
       var results = await client.getFeeEstimate(100);
       expect(results > 0.01, true);
     });
+     */
   });
 }

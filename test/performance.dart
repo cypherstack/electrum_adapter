@@ -1,12 +1,12 @@
+import 'package:electrum_adapter/electrum_adapter.dart';
 import 'package:test/test.dart';
 import 'package:timing/timing.dart';
-
-import 'package:electrum_adapter/electrum_adapter.dart';
 
 void main() {
   group('ElectrumClient', () {
     test('batched requests is fast', () async {
-      var client = await FiroElectrumClient.connect('testnet.rvn.rocks');
+      var client =
+          await FiroElectrumClient.connect(host: 'firo.stackwallet.com');
 
       var scripthash =
           '93bfc0b3df3f7e2a033ca8d70582d5cf4adf6cc0587e10ef224a78955b636923';
@@ -28,7 +28,8 @@ void main() {
     });
 
     test('without batching', () async {
-      var client = await FiroElectrumClient.connect('testnet.rvn.rocks');
+      var client =
+          await FiroElectrumClient.connect(host: 'firo.stackwallet.com');
 
       var scripthash =
           '93bfc0b3df3f7e2a033ca8d70582d5cf4adf6cc0587e10ef224a78955b636923';
@@ -44,7 +45,8 @@ void main() {
     });
 
     test('batched Transactions requests is fast', () async {
-      var client = await FiroElectrumClient.connect('testnet.rvn.rocks');
+      var client =
+          await FiroElectrumClient.connect(host: 'firo.stackwallet.com');
       var txid =
           '56fcc747b8067133a3dc8907565fa1b31e452c98b3f200687cb836f98c3c46ae';
       var tracker = AsyncTimeTracker();
@@ -55,7 +57,8 @@ void main() {
       //expect(tracker.duration < Duration(seconds: 1), true);
     });
     test('not batched Transactions requests costs', () async {
-      var client = await FiroElectrumClient.connect('testnet.rvn.rocks');
+      var client =
+          await FiroElectrumClient.connect(host: 'firo.stackwallet.com');
       var txid =
           '56fcc747b8067133a3dc8907565fa1b31e452c98b3f200687cb836f98c3c46ae';
       var tracker = AsyncTimeTracker();

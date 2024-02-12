@@ -49,12 +49,12 @@ class FiroElectrumClient extends SubscribingClient {
   static Future<FiroElectrumClient> connect({
     bool acceptUnverified = true,
     Duration aliveTimerDuration = conn.aliveTimerDuration,
-    String clientName = clientName,
-    String clientVersion = clientVersion,
+    String clientName = 'Stack Wallet',
+    String clientVersion = '1.0',
     Duration connectionTimeout = conn.connectionTimeout,
-    String host = host,
-    String protocolVersion = protocolVersion,
-    int port = port,
+    String host = 'firo.stackwallet.com',
+    String protocolVersion = '1.10',
+    int port = 50002,
   }) async {
     var client = FiroElectrumClient(await conn.connect(
       host,
@@ -77,6 +77,8 @@ class FiroElectrumClient extends SubscribingClient {
   String toString() => 'FiroElectrumClient connected to $host:$port';
 }
 
+/*
+// Original Ravencoin Electrum client code:
 /// Methods on RavenElectrumClient are defined in the `methods` directory.
 /// See https://electrumx-ravencoin.readthedocs.io/en/latest/protocol-methods.html
 class RavenElectrumClient extends SubscribingClient {
@@ -117,3 +119,4 @@ class RavenElectrumClient extends SubscribingClient {
   @override
   String toString() => 'RavenElectrumClient connected to $host:$port';
 }
+ */
