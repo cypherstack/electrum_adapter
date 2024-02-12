@@ -27,7 +27,7 @@ class AssetAddresses with EquatableMixin {
   }
 }
 
-extension GetAssetAddressesMethod on RavenElectrumClient {
+extension GetAssetAddressesMethod on FiroElectrumClient {
   Future<AssetAddresses?> getAddresses(String symbol) async {
     var response = await request(
       'blockchain.asset.list_addresses_by_asset',

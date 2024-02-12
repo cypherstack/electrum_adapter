@@ -1,7 +1,7 @@
 import '../client/subscribing_client.dart';
 import '../electrum_adapter.dart';
 
-extension SubscribeAssetMethod on RavenElectrumClient {
+extension SubscribeAssetMethod on FiroElectrumClient {
   Future<Stream<String?>> subscribeAsset(String assetName) async {
     var methodPrefix = 'blockchain.asset';
 

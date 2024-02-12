@@ -1,10 +1,10 @@
 name: electrum_adapter
-description: A client for Ravencoin ElectrumX servers
-version: 2.0.4
-homepage: https://github.com/moontreeapp/electrum_adapter
+description: A Dart 3 client for ElectrumX servers with Firo support.  Forked from moontreeapp/electrum_adapter which was made for Ravencoin.
+version: 3.0.0
+homepage: https://github.com/cypherstack/electrum_adapter
 
 environment:
-  sdk: '>=2.12.0 <3.0.0'
+  sdk: ^3.0.6
 
 dependencies:
   async: ^2.9.0

@@ -3,7 +3,7 @@ import 'package:electrum_adapter/electrum_adapter.dart';
 
 void main() {
   test('getTransaction and parse', () async {
-    var client = RavenElectrumClient(await connect('testnet.rvn.rocks'));
+    var client = FiroElectrumClient(await connect('testnet.rvn.rocks'));
     await client.serverVersion(protocolVersion: '1.9');
     var tx = await client.getTransaction(
         'e86f693b46f1ca33480d904acd526079ba7585896cff6d0ae5dcef322d9dc52a');

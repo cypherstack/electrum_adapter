@@ -17,7 +17,7 @@ class ScripthashHistory with EquatableMixin {
   }
 }
 
-extension GetHistoryMethod on RavenElectrumClient {
+extension GetHistoryMethod on FiroElectrumClient {
   Future<List<ScripthashHistory>> getHistory(scripthash) async =>
       ((await request(
         'blockchain.scripthash.get_history',

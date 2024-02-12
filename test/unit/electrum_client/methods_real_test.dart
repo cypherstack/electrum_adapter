@@ -3,10 +3,10 @@ import 'package:electrum_adapter/electrum_adapter.dart';
 
 void main() {
   group('subscriptions', () {
-    late RavenElectrumClient client;
+    late FiroElectrumClient client;
     setUp(() async {
       client =
-          await RavenElectrumClient.connect('testnet.rvn.rocks', port: 50002);
+          await FiroElectrumClient.connect('testnet.rvn.rocks', port: 50002);
     });
 
     test('getMeta', () async {

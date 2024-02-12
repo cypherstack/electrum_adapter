@@ -1,7 +1,7 @@
 import '../client/subscribing_client.dart';
 import '../electrum_adapter.dart';
 
-extension SubscribeScripthashMethod on RavenElectrumClient {
+extension SubscribeScripthashMethod on FiroElectrumClient {
   Future<Stream<String?>> subscribeScripthash(String scripthash) async {
     var methodPrefix = 'blockchain.scripthash';
 

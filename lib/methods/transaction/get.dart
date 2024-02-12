@@ -299,7 +299,7 @@ class Tx with EquatableMixin {
   }
 }
 
-extension GetTransactionMethod on RavenElectrumClient {
+extension GetTransactionMethod on FiroElectrumClient {
   Future<Tx> getTransaction(String txHash) async {
     var response = Map<String, dynamic>.from(await request(
       'blockchain.transaction.get',

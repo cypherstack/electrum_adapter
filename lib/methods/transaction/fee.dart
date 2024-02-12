@@ -1,6 +1,6 @@
 import '../../electrum_adapter.dart';
 
-extension GetFeeEstimateMethod on RavenElectrumClient {
+extension GetFeeEstimateMethod on FiroElectrumClient {
   Future<double> getRelayFee() async => ((await request(
         'blockchain.relayfee', // 0.01 rvn per vkb
       ) as double));

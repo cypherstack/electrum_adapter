@@ -8,8 +8,8 @@ void main() {
   setUp(() => server = MockElectrumServer());
 
   group('ElectrumClient', () {
-    late RavenElectrumClient client;
-    setUp(() => client = RavenElectrumClient(server.channel));
+    late FiroElectrumClient client;
+    setUp(() => client = FiroElectrumClient(server.channel));
 
     test('gets server features', () async {
       server.willRespondWith('features', {

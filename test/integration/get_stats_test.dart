@@ -5,7 +5,7 @@ import 'package:electrum_adapter/electrum_adapter.dart';
 void main() {
   group('electrum_client', () {
     test('get our stats', () async {
-      var client = await RavenElectrumClient.connect('testnet.rvn.rocks');
+      var client = await FiroElectrumClient.connect('testnet.rvn.rocks');
       var stats = await client.getOurStats();
       print(stats);
       expect(stats == null, true);

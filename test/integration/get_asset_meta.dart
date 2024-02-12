@@ -5,7 +5,7 @@ import 'package:electrum_adapter/electrum_adapter.dart';
 void main() {
   group('electrum_client', () {
     test('get our asset meta and transaction (original owner)', () async {
-      var client = await RavenElectrumClient.connect('testnet.rvn.rocks');
+      var client = await FiroElectrumClient.connect('testnet.rvn.rocks');
       var meta = await client.getMeta('ZVZZT!');
       print(meta);
       expect(meta != null, true);
@@ -13,7 +13,7 @@ void main() {
       print(tx);
     });
     test('get our asset meta and transaction (original owner) MAIN', () async {
-      var client = await RavenElectrumClient.connect('electrum1.rvn.rocks');
+      var client = await FiroElectrumClient.connect('electrum1.rvn.rocks');
       var meta = await client.getMeta('PORKYPUNX/AIRDROP2');
       print(meta);
       expect(meta != null, true);

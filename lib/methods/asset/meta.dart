@@ -53,7 +53,7 @@ class AssetMeta with EquatableMixin {
   }
 }
 
-extension GetAssetMetaMethod on RavenElectrumClient {
+extension GetAssetMetaMethod on FiroElectrumClient {
   Future<AssetMeta?> getMeta(String symbol) async {
     var response = await request(
       'blockchain.asset.get_meta',

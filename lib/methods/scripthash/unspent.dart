@@ -32,7 +32,7 @@ class ScripthashUnspent with EquatableMixin {
       'txPos: $txPos, value: $value, height: $height, symbol: $symbol)';
 }
 
-extension GetUnspentMethod on RavenElectrumClient {
+extension GetUnspentMethod on FiroElectrumClient {
   Future<List<ScripthashUnspent>> getUnspent(scripthash) async =>
       ((await request(
         'blockchain.scripthash.listunspent',

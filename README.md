@@ -1,8 +1,8 @@
-A Dart-based client for Ravencoin ElectrumX servers
+A Dart 3 client for Firo ElectrumX servers
 
 ## Notes
 
-The Ravencoin ElectrumX server is quite similar to the Bitcion Electrum server, but has additional methods that allow clients to handle asset issuance and transferral.
+The Firo ElectrumX server is quite similar to the Bitcion Electrum server, but has additional methods for retrieving the used coin serials and anonymity sets.
 
 ## Usage
 
@@ -11,7 +11,7 @@ import 'package:electrum_adapter/electrum_adapter.dart';
 
 void main() async {
   var client =
-      await RavenElectrumClient.connect('testnet.rvn.rocks', port: 50002);
+      await FiroElectrumClient.connect('testnet.rvn.rocks', port: 50002);
   var features = await client.features();
   print(features);
   await client.close();
@@ -22,4 +22,4 @@ void main() async {
 
 Please file feature requests and bugs at the [issue tracker][tracker].
 
-[tracker]: https://github.com/moontreeapp/electrum_adapter/issues
+[tracker]: https://github.com/cypherstack/electrum_adapter/issues

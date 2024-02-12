@@ -17,7 +17,7 @@ String parseAsmForMemo(String asm) {
   return '';
 }
 
-extension GetMemoMethod on RavenElectrumClient {
+extension GetMemoMethod on FiroElectrumClient {
   Future<String> getMemo(String txHash) async {
     var response = Map<String, dynamic>.from(await request(
       'blockchain.transaction.get',

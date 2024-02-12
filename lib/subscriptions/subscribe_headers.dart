@@ -13,7 +13,7 @@ class BlockHeader extends Equatable {
   List<Object> get props => <Object>[hex, height];
 }
 
-extension SubscribeHeadersMethod on RavenElectrumClient {
+extension SubscribeHeadersMethod on FiroElectrumClient {
   Stream<BlockHeader> subscribeHeaders() {
     var methodPrefix = 'blockchain.headers';
 

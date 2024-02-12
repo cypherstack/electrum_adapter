@@ -45,7 +45,7 @@ class ScripthashAssetBalances with EquatableMixin {
   }
 }
 
-extension GetBalanceMethod on RavenElectrumClient {
+extension GetBalanceMethod on FiroElectrumClient {
   Future<ScripthashBalance> getBalance(scripthash) async {
     dynamic balance =
         await request('blockchain.scripthash.get_balance', [scripthash]);

@@ -4,7 +4,7 @@ import 'package:electrum_adapter/electrum_adapter.dart';
 
 void main() {
   group('electrum_client', () {
-    late RavenElectrumClient client;
+    late FiroElectrumClient client;
     setUp(() async {
       // Our mainnet server:
       // var channel = await connect('143.198.142.78', port: 50002);
@@ -19,7 +19,7 @@ void main() {
       var channel = await connect('testnet.rvn.rocks', port: 50002);
       //var channel = await connect('mainnet.rvn.rocks', port: 50002);
 
-      client = RavenElectrumClient(channel);
+      client = FiroElectrumClient(channel);
     });
 
     test('get unspent', () async {

@@ -5,9 +5,9 @@ import 'package:electrum_adapter/electrum_adapter.dart';
 void main() {
   group('electrum_client', () {
     test('get our asset addresses', () async {
-      //var client = await RavenElectrumClient.connect('rvn4lyfe.com'); // mainnet
+      //var client = await FiroElectrumClient.connect('rvn4lyfe.com'); // mainnet
       var client =
-          await RavenElectrumClient.connect('electrum1.rvn.rocks'); // mainnet
+          await FiroElectrumClient.connect('electrum1.rvn.rocks'); // mainnet
       var addresses = await client.getAddresses('CATE');
       print(addresses);
       expect(addresses!.owner, '');
