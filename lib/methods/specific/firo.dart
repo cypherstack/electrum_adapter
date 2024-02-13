@@ -1,7 +1,5 @@
 import 'package:electrum_adapter/electrum_adapter.dart';
 
-// ======= Spark ===============================================================
-
 extension SparkMethods on FiroElectrumClient {
   /// Takes [startNumber], if it is 0, we get the full set,
   /// otherwise the used tags after that number
@@ -71,8 +69,6 @@ extension SparkMethods on FiroElectrumClient {
   }
 }
 
-// ======= Lelantus ============================================================
-
 extension LelantusMethods on FiroElectrumClient {
   /// Returns the whole Lelantus anonymity set for denomination in the groupId.
   ///
@@ -90,13 +86,13 @@ extension LelantusMethods on FiroElectrumClient {
   ///   }
   Future<Map<String, dynamic>> getLelantusAnonymitySet({
     String groupId = "1",
-    String blockhash = "",
+    String blockHash = "",
   }) async {
     final response = await request(
       'lelantus.getanonymityset',
       [
         groupId,
-        blockhash,
+        blockHash,
       ],
     );
     return Map<String, dynamic>.from(response as Map);
