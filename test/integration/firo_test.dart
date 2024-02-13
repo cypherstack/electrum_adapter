@@ -1,4 +1,3 @@
-import 'package:electrum_adapter/client/base_client.dart';
 import 'package:electrum_adapter/electrum_adapter.dart';
 import 'package:electrum_adapter/methods/specific/firo.dart';
 import 'package:test/test.dart';
@@ -14,7 +13,7 @@ void main() {
     });
   });
 
-  group('FiroElectrumClient', () {
+  group('FiroElectrumClient Spark tests', () {
     String sparkCoinHash =
         "b476ed2b374bb081ea51d111f68f0136252521214e213d119b8dc67b92f5a390"; // TODO provide valid example.
 
@@ -104,6 +103,60 @@ void main() {
       //     response["tags"].first ==
       //         "lbezEvX1zqCdscr2KRmO0TtX5LN6MJw5EADVKAW9/2QBAA==",
       //     true); // TODO verify this first used coin tag won't change.
+    });
+  });
+
+  group('FiroElectrumClient Lelantus tests', () {
+    test('get lelantus anonymity set', () async {
+      var channel = await connect('firo.stackwallet.com');
+      var client = FiroElectrumClient(channel);
+      var response = await client.getLelantusAnonymitySet();
+
+      expect(response.containsKey("blockHash"), true);
+      expect(response.containsKey("setHash"), true);
+      expect(response.containsKey("coins"), true);
+      expect((response["coins"].first as List).length, 4);
+      expect((response["coins"].first as List)[0].runtimeType, String);
+      expect((response["coins"].first as List)[0].length >= 48, true);
+      expect((response["coins"].first as List)[1].runtimeType, String);
+      expect((response["coins"].first as List)[1].length >= 44, true);
+      expect((response["coins"].first as List)[2].runtimeType, int);
+      expect((response["coins"].first as List)[2] >= 9997057, true);
+      expect((response["coins"].first as List)[3].runtimeType, String);
+      expect((response["coins"].first as List)[3].length >= 44, true);
+    });
+
+    /*
+    test('get lelantus mint data', () async {
+      var channel = await connect('firo.stackwallet.com');
+      var client = FiroElectrumClient(channel);
+      var response = await client.getLelantusMintData(
+        mints: [
+          "b476ed2b374bb081ea51d111f68f0136252521214e213d119b8dc67b92f5a390",
+        ],
+      );
+      // TODO tests.
+    });
+     */
+
+    test('get lelantus used coin serials', () async {
+      var channel = await connect('firo.stackwallet.com');
+      var client = FiroElectrumClient(channel);
+      var response = await client.getLelantusUsedCoinSerials(
+        startNumber: 0,
+      );
+
+      expect(response["serials"].first.runtimeType, String);
+      expect(response["serials"].first.length >= 44, true);
+    });
+
+    test('get lelantus latest coin id', () async {
+      var channel = await connect('firo.stackwallet.com');
+      var client = FiroElectrumClient(channel);
+      var response = await client.getLatestCoinId();
+
+      expect(response.runtimeType, int);
+      expect(response >= 2, true);
     });
   });
 }
