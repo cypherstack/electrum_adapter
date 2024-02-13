@@ -117,22 +117,14 @@ extension LelantusMethods on FiroElectrumClient {
   Future<Map<String, dynamic>> getLelantusUsedCoinSerials({
     required int startNumber,
   }) async {
-    // Retry up to 3 times if the result is not a list.
-    int retryCount = 3;
-    dynamic response;
-
-    while (retryCount > 0 && response is! List) {
-      response = await request(
-        'lelantus.getusedcoinserials',
-        [
-          "$startNumber",
-        ],
-        // requestTimeout: const Duration(minutes: 2),
-        // TODO alter request to accept a timeout param.
-      );
-
-      retryCount--;
-    }
+    final response = await request(
+      'lelantus.getusedcoinserials',
+      [
+        "$startNumber",
+      ],
+      // requestTimeout: const Duration(minutes: 2),
+      // TODO alter request to accept a timeout param.
+    );
 
     return Map<String, dynamic>.from(response as Map);
   }
