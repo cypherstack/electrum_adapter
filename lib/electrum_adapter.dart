@@ -23,10 +23,8 @@ export 'methods/specific/raven/server/version.dart';
 export 'methods/specific/raven/transaction/fee.dart';
 export 'methods/specific/raven/transaction/get.dart';
 export 'methods/specific/raven/transaction/memo.dart';
-export 'subscriptions/subscribe_asset.dart';
-export 'subscriptions/subscribe_headers.dart';
-export 'subscriptions/subscribe_scripthash.dart';
-export 'subscriptions/unsubscribe_scripthash.dart';
+export 'subscriptions/shared.dart';
+export 'subscriptions/specific/raven/subscribe_asset.dart';
 
 class Header {
   String hex;
