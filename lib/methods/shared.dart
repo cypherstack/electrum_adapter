@@ -6,6 +6,9 @@ extension SharedMethods on ElectrumClient {
   Future<Map<String, dynamic>> features() async =>
       (await request('server.features')) as Map<String, dynamic>;
 
+  Future<Map<String, dynamic>> serverVersion() async =>
+      (await request('server.version')) as Map<String, dynamic>;
+
   Future<String> broadcastTransaction(String rawTx) async => await request(
         'blockchain.transaction.broadcast',
         [rawTx],

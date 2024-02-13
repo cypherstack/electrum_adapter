@@ -7,6 +7,7 @@ import 'dart:async';
 
 import 'package:electrum_adapter/client/subscribing_client.dart';
 import 'package:electrum_adapter/connect.dart' as conn;
+import 'package:electrum_adapter/methods/shared.dart';
 import 'package:electrum_adapter/methods/specific/raven/server/version.dart';
 import 'package:stream_channel/stream_channel.dart';
 
@@ -63,6 +64,55 @@ class ElectrumClient extends SubscribingClient {
 
     return client;
   }
+
+  @override
+  String toString() => 'RavenElectrumClient connected to $host:$port';
+}
+
+/// Methods on FiroElectrumClient are defined in the `methods/specific/firo.dart` file.
+///
+/// See https://github.com/firoorg/electrumx-firo
+class FiroElectrumClient extends ElectrumClient {
+  FiroElectrumClient(StreamChannel<dynamic> channel,
+      {String host = '', int port = 50002})
+      : super(channel, host, port);
+  String clientName = 'electrum_adapter';
+  String clientVersion = '2.0';
+  String protocolVersion = '1.10';
+
+  static Future<FiroElectrumClient> connect(
+    String host, {
+    int port = 50002,
+    Duration connectionTimeout = conn.connectionTimeout,
+    Duration aliveTimerDuration = conn.aliveTimerDuration,
+    bool acceptUnverified = true,
+    String clientName = 'electrum_adapter',
+    String clientVersion = '2.0',
+    String protocolVersion = '1.10',
+  }) async {
+    var client = FiroElectrumClient(
+      await conn.connect(
+        host,
+        port: port,
+        connectionTimeout: connectionTimeout,
+        aliveTimerDuration: aliveTimerDuration,
+        acceptUnverified: acceptUnverified,
+      ),
+      host: host,
+      port: port,
+    );
+    client.clientName = clientName;
+    client.protocolVersion = protocolVersion;
+    await client.serverVersion(
+        /*
+        clientName: '$clientName/$clientVersion',
+        protocolVersion: protocolVersion*/
+        );
+    return client;
+  }
+
+  @override
+  String toString() => 'FiroElectrumClient connected to $host:$port';
 }
 
 /// Methods on RavenElectrumClient are defined in the `methods` directory.
