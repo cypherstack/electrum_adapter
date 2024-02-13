@@ -11,7 +11,7 @@ extension GetUsedCoinsTagsMethod on FiroElectrumClient {
       [
         "$startNumber",
       ],
-    );
+    ) as Map<String, dynamic>;
   }
 }
 
@@ -35,7 +35,7 @@ extension GetSparkAnonymitySet on FiroElectrumClient {
         coinGroupId,
         startBlockHash,
       ],
-    );
+    ) as Map<String, dynamic>;
   }
 }
 
@@ -60,7 +60,7 @@ extension GetSparkMintMetaDataMethod on FiroElectrumClient {
           "coinHashes": sparkCoinHashes,
         },
       ],
-    );
+    ) as List<dynamic>;
   }
 }
 
@@ -71,7 +71,6 @@ extension GetSparkLatestCoinId on FiroElectrumClient {
   Future<int> getSparkLatestCoinId() async {
     return await request(
       'spark.getsparklatestcoinid',
-    );
+    ) as int;
   }
 }
-
