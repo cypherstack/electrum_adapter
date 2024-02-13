@@ -1,5 +1,5 @@
 /// for
-import '../../electrum_adapter.dart';
+import 'package:electrum_adapter/electrum_adapter.dart';
 
 extension GetAssetNamesMethod on RavenElectrumClient {
   Future<Iterable> getAssetsByPrefix(String symbol) async {

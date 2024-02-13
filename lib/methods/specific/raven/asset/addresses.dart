@@ -4,7 +4,7 @@
 ///   "R9HDH3ZDuLRVF8ivzUwnojZa7thtRXQooM": 1
 /// }
 import 'package:equatable/equatable.dart';
-import '../../electrum_adapter.dart';
+import 'package:electrum_adapter/electrum_adapter.dart';
 
 class AssetAddresses with EquatableMixin {
   late final String asset;

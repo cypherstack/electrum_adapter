@@ -1,6 +1,11 @@
-import '../../electrum_adapter.dart';
+import 'package:electrum_adapter/electrum_adapter.dart';
 
-extension BroadcastTransactionMethod on RavenElectrumClient {
+extension SharedMethods on ElectrumClient {
+  Future<dynamic> ping() async => await request('server.ping');
+
+  Future<Map<String, dynamic>> features() async =>
+      await request('server.features');
+
   Future<String> broadcastTransaction(String rawTx) async => await request(
         'blockchain.transaction.broadcast',
         [rawTx],

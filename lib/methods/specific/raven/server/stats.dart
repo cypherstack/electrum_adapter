@@ -1,4 +1,4 @@
-import '../../electrum_adapter.dart';
+import 'package:electrum_adapter/electrum_adapter.dart';
 
 class ServerStats {
   late double ourCost;

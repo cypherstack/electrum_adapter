@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
 
-import '../../electrum_adapter.dart';
+import 'package:electrum_adapter/electrum_adapter.dart';
 
 class ScripthashHistory with EquatableMixin {
   int height;
