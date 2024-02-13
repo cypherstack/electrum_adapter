@@ -23,14 +23,14 @@ class Subscribable {
 
   /// Returns a matching key, that can be used to match the original request to
   /// subsequent notifications.
-  String key(List params) {
+  String key(List<dynamic> params) {
     var slice = params.sublist(0, paramsCount);
     var json = jsonEncode(slice);
     return '$methodPrefix$json';
   }
 
-  dynamic notificationResult(List params) {
-    return params[paramsCount] ?? {};
+  dynamic notificationResult(List<dynamic> params) {
+    return params[paramsCount] ?? <dynamic>{};
   }
 
   static String getMethodPrefix(String method) {

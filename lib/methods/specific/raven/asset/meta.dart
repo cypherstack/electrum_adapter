@@ -1,6 +1,6 @@
 /// get meta data about an asset by name
-import 'package:equatable/equatable.dart';
 import 'package:electrum_adapter/electrum_adapter.dart';
+import 'package:equatable/equatable.dart';
 
 class TxSource with EquatableMixin {
   late final String txHash;
@@ -67,14 +67,14 @@ extension GetAssetMetaMethod on RavenElectrumClient {
     if (response.isNotEmpty) {
       return AssetMeta(
         symbol: symbol,
-        satsInCirculation: response['sats_in_circulation'],
-        divisions: response['divisions'],
-        reissuable: response['reissuable'],
-        hasIpfs: response['has_ipfs'],
+        satsInCirculation: response['sats_in_circulation'] as int,
+        divisions: response['divisions'] as int,
+        reissuable: response['reissuable'] as bool,
+        hasIpfs: response['has_ipfs'] as bool,
         source: TxSource(
-            txHash: response['source']['tx_hash'],
-            txPos: response['source']['tx_pos'],
-            height: response['source']['height']),
+            txHash: response['source']['tx_hash'] as String,
+            txPos: response['source']['tx_pos'] as int,
+            height: response['source']['height'] as int),
       );
     }
     return null;

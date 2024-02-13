@@ -19,13 +19,14 @@ String parseAsmForMemo(String asm) {
 
 extension GetMemoMethod on RavenElectrumClient {
   Future<String> getMemo(String txHash) async {
-    var response = Map<String, dynamic>.from(await request(
+    var response = Map<String, dynamic>.from((await request(
       'blockchain.transaction.get',
       [txHash, true],
-    ));
+    )) as Map);
     if (response.keys.contains('vout')) {
       for (var asm in [
-        for (var vout in response['vout']) vout['scriptPubKey']['asm']
+        for (var vout in response['vout'] as List)
+          vout['scriptPubKey']['asm'] as String
       ]) {
         var ret = parseAsmForMemo(asm);
         if (ret != '') {

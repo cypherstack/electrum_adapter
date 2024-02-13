@@ -5,11 +5,13 @@ library electrum_adapter;
 
 import 'dart:async';
 
-import 'client/subscribing_client.dart';
-import 'connect.dart' as conn;
-import 'methods/specific/raven/server/version.dart';
+import 'package:electrum_adapter/client/subscribing_client.dart';
+import 'package:electrum_adapter/connect.dart' as conn;
+import 'package:electrum_adapter/methods/specific/raven/server/version.dart';
+import 'package:stream_channel/stream_channel.dart';
 
 export 'connect.dart';
+export 'methods/shared.dart';
 export 'methods/specific/raven/asset/addresses.dart';
 export 'methods/specific/raven/asset/assets.dart';
 export 'methods/specific/raven/asset/meta.dart';
@@ -18,7 +20,6 @@ export 'methods/specific/raven/scripthash/history.dart';
 export 'methods/specific/raven/scripthash/unspent.dart';
 export 'methods/specific/raven/server/stats.dart';
 export 'methods/specific/raven/server/version.dart';
-export 'methods/shared.dart';
 export 'methods/specific/raven/transaction/fee.dart';
 export 'methods/specific/raven/transaction/get.dart';
 export 'methods/specific/raven/transaction/memo.dart';
@@ -36,7 +37,7 @@ class Header {
 /// Methods on RavenElectrumClient are defined in the `methods` directory.
 /// See https://electrumx-ravencoin.readthedocs.io/en/latest/protocol-methods.html
 class ElectrumClient extends SubscribingClient {
-  ElectrumClient(channel, String host, int port)
+  ElectrumClient(StreamChannel<dynamic> channel, String host, int port)
       : this.host = host,
         this.port = port,
         super(channel);
@@ -69,7 +70,8 @@ class ElectrumClient extends SubscribingClient {
 /// Methods on RavenElectrumClient are defined in the `methods` directory.
 /// See https://electrumx-ravencoin.readthedocs.io/en/latest/protocol-methods.html
 class RavenElectrumClient extends ElectrumClient {
-  RavenElectrumClient(channel, {String host = '', int port = 50002})
+  RavenElectrumClient(StreamChannel<dynamic> channel,
+      {String host = '', int port = 50002})
       : super(channel, host, port);
   String clientName = 'MTWallet';
   String clientVersion = '1.0';

@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:json_rpc_2/json_rpc_2.dart' as rpc;
-import 'package:stream_channel/stream_channel.dart';
 import 'package:stack_trace/stack_trace.dart';
+import 'package:stream_channel/stream_channel.dart';
 
 /// The BaseClient class must be given an open channel to the server, which it
 /// will use to make requests (or close the channel). We intentionally keep the
@@ -37,7 +37,8 @@ class BaseClient {
   ///
   late rpc.Peer peer;
 
-  BaseClient(StreamChannel channel, {rpc.ErrorCallback? onUnhandledError}) {
+  BaseClient(StreamChannel<dynamic> channel,
+      {rpc.ErrorCallback? onUnhandledError}) {
     peer = rpc.Peer.withoutJson(channel,
         onUnhandledError: onUnhandledError ?? handleError);
     unawaited(peer.listen());
@@ -47,13 +48,13 @@ class BaseClient {
     return peer.close();
   }
 
-  Future request(String method, [parameters]) async {
+  Future<dynamic> request(String method, [dynamic parameters]) async {
     return await peer.sendRequest(method, parameters);
   }
 
-  void handleError(error, trace) {
+  void handleError(dynamic error, dynamic trace) {
     print(error + ' 1');
-    var simpleTrace = Trace.from(trace);
+    final simpleTrace = Trace.from(trace as StackTrace);
     print(simpleTrace.terse);
   }
 }

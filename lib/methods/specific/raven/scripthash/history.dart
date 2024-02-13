@@ -1,6 +1,5 @@
-import 'package:equatable/equatable.dart';
-
 import 'package:electrum_adapter/electrum_adapter.dart';
+import 'package:equatable/equatable.dart';
 
 class ScripthashHistory with EquatableMixin {
   int height;
@@ -18,14 +17,14 @@ class ScripthashHistory with EquatableMixin {
 }
 
 extension GetHistoryMethod on RavenElectrumClient {
-  Future<List<ScripthashHistory>> getHistory(scripthash) async =>
+  Future<List<ScripthashHistory>> getHistory(String scripthash) async =>
       ((await request(
         'blockchain.scripthash.get_history',
         [scripthash],
       ) as List<dynamic>)
           .map((response) => ScripthashHistory(
-              height: response['height'],
-              txHash: response['tx_hash']))).toList();
+              height: response['height'] as int,
+              txHash: response['tx_hash'] as String))).toList();
 
   /// returns histories in the same order as scripthashes passed in
   Future<List<List<ScripthashHistory>>> getHistories(

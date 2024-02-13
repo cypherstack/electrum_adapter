@@ -1,7 +1,6 @@
+import 'package:electrum_adapter/client/subscribing_client.dart';
+import 'package:electrum_adapter/electrum_adapter.dart';
 import 'package:equatable/equatable.dart';
-
-import '../client/subscribing_client.dart';
-import '../electrum_adapter.dart';
 
 class BlockHeader extends Equatable {
   final String hex;
@@ -20,7 +19,9 @@ extension SubscribeHeadersMethod on RavenElectrumClient {
     // If this is the first time, register
     registerSubscribable(methodPrefix, 0);
 
-    return subscribeNonBatch(methodPrefix)
-        .asyncMap((item) => BlockHeader(item['hex'], item['height']));
+    return subscribeNonBatch(methodPrefix).asyncMap((item) => BlockHeader(
+          item['hex'] as String,
+          item['height'] as int,
+        ));
   }
 }

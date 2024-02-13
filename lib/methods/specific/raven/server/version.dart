@@ -13,6 +13,6 @@ extension ServerVersionMethod on RavenElectrumClient {
   }) async {
     var proc = 'server.version';
     var response = await request(proc, [clientName, protocolVersion]);
-    return ServerVersion(response[0], response[1]);
+    return ServerVersion(response[0] as String, response[1] as String);
   }
 }
