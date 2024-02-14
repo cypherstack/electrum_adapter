@@ -70,6 +70,8 @@ class ElectrumClient extends SubscribingClient {
       ),
       host,
       port,
+      useSSL,
+      proxyInfo,
     );
 
     return client;
@@ -83,9 +85,9 @@ class ElectrumClient extends SubscribingClient {
 ///
 /// See https://github.com/firoorg/electrumx-firo
 class FiroElectrumClient extends ElectrumClient {
-  FiroElectrumClient(StreamChannel<dynamic> channel,
-      {String host = '', int port = 50002})
-      : super(channel, host, port);
+  FiroElectrumClient(StreamChannel<dynamic> channel, String host, int port,
+      bool useSSL, ({InternetAddress host, int port})? proxyInfo)
+      : super(channel, host, port, useSSL, proxyInfo);
   String clientName = 'electrum_adapter';
   String clientVersion = '2.0';
   String protocolVersion = '1.10';
@@ -112,8 +114,10 @@ class FiroElectrumClient extends ElectrumClient {
         useSSL: useSSL,
         proxyInfo: proxyInfo,
       ),
-      host: host,
-      port: port,
+      host,
+      port,
+      useSSL,
+      proxyInfo,
     );
     client.clientName = clientName;
     client.protocolVersion = protocolVersion;
@@ -133,8 +137,11 @@ class FiroElectrumClient extends ElectrumClient {
 /// See https://electrumx-ravencoin.readthedocs.io/en/latest/protocol-methods.html
 class RavenElectrumClient extends ElectrumClient {
   RavenElectrumClient(StreamChannel<dynamic> channel,
-      {String host = '', int port = 50002})
-      : super(channel, host, port);
+      {String host = '',
+      int port = 50002,
+      bool useSSL = true,
+      ({InternetAddress host, int port})? proxyInfo})
+      : super(channel, host, port, useSSL, proxyInfo);
   String clientName = 'MTWallet';
   String clientVersion = '1.0';
   String protocolVersion = '1.10';
