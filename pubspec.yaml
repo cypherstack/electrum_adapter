@@ -4,7 +4,7 @@ version: 3.0.0
 homepage: https://github.com/cypherstack/electrum_adapter
 
 environment:
-  sdk: '>=2.15.0 <3.0.0'
+  sdk: '>3.0.0'
 
 dependencies:
   async: ^2.9.0
@@ -13,11 +13,16 @@ dependencies:
   stream_channel: ^2.1.0
   stack_trace: ^1.10.0
   lints: ^3.0.0
+
+  tor_ffi_plugin: # For embedded SOCKSSocket class.
+    git:
+      url: https://github.com/cypherstack/tor.git
+      ref: 0a6888282f4e98401051a396e9d2293bd55ac2c2
   
 dev_dependencies:
   test: ^1.16.0
   timing: ^1.0.0
-  analyzer: ^6.4.1
+  analyzer: ^6.2.0
 
 #dependency_overrides:
 #  json_stream_parser:

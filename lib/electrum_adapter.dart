@@ -4,6 +4,7 @@
 library electrum_adapter;
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:electrum_adapter/client/subscribing_client.dart';
 import 'package:electrum_adapter/connect.dart' as conn;
@@ -49,6 +50,8 @@ class ElectrumClient extends SubscribingClient {
     Duration connectionTimeout = conn.connectionTimeout,
     Duration aliveTimerDuration = conn.aliveTimerDuration,
     bool acceptUnverified = true,
+    bool useSSL = true,
+    ({InternetAddress host, int port})? proxyInfo,
   }) async {
     final client = ElectrumClient(
       await conn.connect(
@@ -57,6 +60,8 @@ class ElectrumClient extends SubscribingClient {
         connectionTimeout: connectionTimeout,
         aliveTimerDuration: aliveTimerDuration,
         acceptUnverified: acceptUnverified,
+        useSSL: useSSL,
+        proxyInfo: proxyInfo,
       ),
       host,
       port,
@@ -89,6 +94,8 @@ class FiroElectrumClient extends ElectrumClient {
     String clientName = 'electrum_adapter',
     String clientVersion = '2.0',
     String protocolVersion = '1.10',
+    bool useSSL = true,
+    ({InternetAddress host, int port})? proxyInfo,
   }) async {
     var client = FiroElectrumClient(
       await conn.connect(
@@ -97,6 +104,8 @@ class FiroElectrumClient extends ElectrumClient {
         connectionTimeout: connectionTimeout,
         aliveTimerDuration: aliveTimerDuration,
         acceptUnverified: acceptUnverified,
+        useSSL: useSSL,
+        proxyInfo: proxyInfo,
       ),
       host: host,
       port: port,
