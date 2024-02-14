@@ -37,12 +37,17 @@ class Header {
 /// Methods on RavenElectrumClient are defined in the `methods` directory.
 /// See https://electrumx-ravencoin.readthedocs.io/en/latest/protocol-methods.html
 class ElectrumClient extends SubscribingClient {
-  ElectrumClient(StreamChannel<dynamic> channel, String host, int port)
+  ElectrumClient(StreamChannel<dynamic> channel, String host, int port,
+      bool useSSL, ({InternetAddress host, int port})? proxyInfo)
       : this.host = host,
         this.port = port,
+        this.useSSL = useSSL,
+        this.proxyInfo = proxyInfo,
         super(channel);
   late final String host;
   late final int port;
+  late final bool useSSL;
+  late final ({InternetAddress host, int port})? proxyInfo;
 
   static Future<ElectrumClient> connect({
     required String host,
