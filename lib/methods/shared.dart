@@ -62,4 +62,7 @@ extension SharedMethods on ElectrumClient {
     }
     return futures;
   }
+
+  Future<Map<String, dynamic>> getFeeRate() async =>
+      (await request('blockchain.getfeerate')) as Map<String, dynamic>;
 }
