@@ -27,4 +27,39 @@ extension SharedMethods on ElectrumClient {
     List<String> results = await Future.wait<String>(futures);
     return results;
   }
+
+  Future<Map<String, dynamic>> getTransaction(String txHash) async {
+    var response = Map<String, dynamic>.from((await request(
+      'blockchain.transaction.get',
+      [txHash, true],
+    )) as Map);
+    return response;
+  }
+
+  /// returns histories in the same order as txHashes passed in
+  Future<List<Map<String, dynamic>>> getTransactions(
+      Iterable<String> txHashes) async {
+    var futures = <Future<Map<String, dynamic>>>[];
+    if (txHashes.isNotEmpty) {
+      peer.withBatch(() {
+        for (var txHash in txHashes) {
+          futures.add(getTransaction(txHash));
+        }
+      });
+    }
+    return await Future.wait<Map<String, dynamic>>(futures);
+  }
+
+  List<Future<Map<String, dynamic>>> getTransactionsFutures(
+      Iterable<String> txHashes) {
+    var futures = <Future<Map<String, dynamic>>>[];
+    if (txHashes.isNotEmpty) {
+      peer.withBatch(() {
+        for (var txHash in txHashes) {
+          futures.add(getTransaction(txHash));
+        }
+      });
+    }
+    return futures;
+  }
 }
