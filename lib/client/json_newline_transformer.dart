@@ -1446,7 +1446,11 @@ abstract class _ChunkedJsonParser<T> {
     // If the value is outside the range +/-maxExactDouble or
     // exponent is outside the range +/-22, then we can't trust simple double
     // arithmetic to get the exact result, so we use the system double parsing.
-    listener.handleNumber(parseDouble(start, position));
+    try {
+      listener.handleNumber(parseDouble(start, position));
+    } catch (e, s) {
+      // print("Error in handleNumber: ${e.toString()}");
+    }
     return position;
   }
 
