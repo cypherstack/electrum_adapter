@@ -30,6 +30,14 @@ Future<StreamChannel> connect(
     } else {
       socket = await io.Socket.connect(host, port, timeout: connectionTimeout);
     }
+    var channel =
+        StreamChannel(socket.cast<List<int>>() as Stream, socket as StreamSink);
+    var channelUtf8 =
+        channel.transform(StreamChannelTransformer.fromCodec(convert.utf8));
+    var channelJson = jsonNewlineDocument
+        .bind(channelUtf8)
+        .transformStream(utils.ignoreFormatExceptions);
+    return channelJson;
   } else {
     // Proxy info is provided, so we should use it.
     //
@@ -43,13 +51,14 @@ Future<StreamChannel> connect(
 
     // Then connect to destination host.
     await socket.connectTo(host, port);
+
+    var channel = StreamChannel(socket.inputStream as Stream<dynamic>,
+        socket.outputStream as StreamSink<dynamic>);
+    var channelUtf8 =
+        channel.transform(StreamChannelTransformer.fromCodec(convert.utf8));
+    var channelJson = jsonNewlineDocument
+        .bind(channelUtf8)
+        .transformStream(utils.ignoreFormatExceptions);
+    return channelJson;
   }
-  var channel =
-      StreamChannel(socket.cast<List<int>>() as Stream, socket as StreamSink);
-  var channelUtf8 =
-      channel.transform(StreamChannelTransformer.fromCodec(convert.utf8));
-  var channelJson = jsonNewlineDocument
-      .bind(channelUtf8)
-      .transformStream(utils.ignoreFormatExceptions);
-  return channelJson;
 }
