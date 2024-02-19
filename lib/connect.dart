@@ -27,6 +27,7 @@ Future<StreamChannel> connect(
       socket = await io.SecureSocket.connect(host, port,
           timeout: connectionTimeout,
           onBadCertificate: acceptUnverified ? (_) => true : null);
+      // TODO do not automatically accept unverified certificates.
     } else {
       socket = await io.Socket.connect(host, port, timeout: connectionTimeout);
     }
