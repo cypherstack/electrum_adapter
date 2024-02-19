@@ -1,9 +1,9 @@
 // ignore_for_file: constant_identifier_names
 
 import 'dart:convert';
-import "dart:typed_data";
 
 import 'package:async/async.dart';
+import 'package:flutter/foundation.dart';
 import 'package:stream_channel/stream_channel.dart';
 
 /// A [StreamChannelTransformer] similar to the default jsonDocument
@@ -1446,10 +1446,16 @@ abstract class _ChunkedJsonParser<T> {
     // If the value is outside the range +/-maxExactDouble or
     // exponent is outside the range +/-22, then we can't trust simple double
     // arithmetic to get the exact result, so we use the system double parsing.
+    //
+    // This can throw, but it seems safe to try-catch it and return the position
+    // calculated up to this point.
     try {
       listener.handleNumber(parseDouble(start, position));
     } catch (e, s) {
-      // print("Error in handleNumber: ${e.toString()}");
+      if (kDebugMode) {
+        print("electrum_adapter: Error in parseNumber."
+            "\nError: ${e.toString()}\nStack trace: $s\nPosition: $position");
+      }
     }
     return position;
   }
