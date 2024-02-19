@@ -39,9 +39,10 @@ Future<StreamChannel> connect(
       proxyPort: proxyInfo.port,
       sslEnabled: true,
     );
+    await socket.connect();
 
     // Then connect to destination host.
-    await socket.connect(host, port, useSSL: useSSL);
+    await socket.connectTo(host, port);
   }
   var channel =
       StreamChannel(socket.cast<List<int>>() as Stream, socket as StreamSink);
