@@ -1530,7 +1530,13 @@ class _JsonStringParser extends _ChunkedJsonParser<String> {
 
   @override
   double parseDouble(int start, int end) {
-    double? d = _parseDouble(chunk, start, end);
+    double? d;
+    // If chunk.substring(start, end) contains "e", it uses scientific notation.
+    if (chunk.substring(start, end).contains("e")) {
+      d = double.parse(chunk.substring(start, end));
+    } else {
+      d = _parseDouble(chunk, start, end);
+    }
     if (d == null) {
       throw "Invalid double";
     }
