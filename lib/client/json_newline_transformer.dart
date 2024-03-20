@@ -1532,10 +1532,17 @@ class _JsonStringParser extends _ChunkedJsonParser<String> {
   double parseDouble(int start, int end) {
     double? d;
     // If chunk.substring(start, end) contains "e", it uses scientific notation.
-    if (chunk.substring(start, end).contains("e")) {
+    // if (chunk.substring(start, end).contains("e")) {
+    try {
       d = double.parse(chunk.substring(start, end));
-    } else {
+    } catch (e, s) {
+      if (kDebugMode) {
+        print("electrum_adapter: Error in parseDouble."
+            "\nError: ${e.toString()}\nStack trace: $s\nPosition: $start");
+      }
+    // } else {
       d = _parseDouble(chunk, start, end);
+      // }
     }
     if (d == null) {
       throw "Invalid double";
