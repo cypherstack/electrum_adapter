@@ -1,23 +1,28 @@
 name: electrum_adapter
-description: A client for Ravencoin ElectrumX servers
-version: 2.0.4
-homepage: https://github.com/moontreeapp/electrum_adapter
+description: A client for ElectrumX servers
+version: 3.0.0
+homepage: https://github.com/cypherstack/electrum_adapter
 
 environment:
-  sdk: '>=2.12.0 <3.0.0'
+  sdk: '>3.0.0'
 
 dependencies:
   async: ^2.9.0
   equatable: ^2.0.5
   json_rpc_2: ^3.0.2
-  pedantic: ^1.11.1
   stream_channel: ^2.1.0
   stack_trace: ^1.10.0
+  lints: ^3.0.0
+
+  tor_ffi_plugin: # For embedded SOCKSSocket class.
+    git:
+      url: https://github.com/cypherstack/tor.git
+      ref: e37dc4e22f7acb2746b70bdc935f0eb3c50b8b71
   
 dev_dependencies:
-  lints: ^2.0.0
   test: ^1.16.0
   timing: ^1.0.0
+  analyzer: ^6.2.0
 
 #dependency_overrides:
 #  json_stream_parser:

@@ -1,6 +1,5 @@
+import 'package:electrum_adapter/electrum_adapter.dart';
 import 'package:equatable/equatable.dart';
-
-import '../../electrum_adapter.dart';
 
 class ScripthashBalance with EquatableMixin {
   int confirmed;
@@ -46,10 +45,13 @@ class ScripthashAssetBalances with EquatableMixin {
 }
 
 extension GetBalanceMethod on RavenElectrumClient {
-  Future<ScripthashBalance> getBalance(scripthash) async {
+  Future<ScripthashBalance> getBalance(String scripthash) async {
     dynamic balance =
         await request('blockchain.scripthash.get_balance', [scripthash]);
-    return ScripthashBalance(balance['confirmed'], balance['unconfirmed']);
+    return ScripthashBalance(
+      balance['confirmed'] as int,
+      balance['unconfirmed'] as int,
+    );
   }
 
   /// returns balances in the same order as scripthashes passed in
@@ -67,11 +69,13 @@ extension GetBalanceMethod on RavenElectrumClient {
     return results;
   }
 
-  Future<ScripthashAssetBalances> getAssetBalance(scripthash) async {
+  Future<ScripthashAssetBalances> getAssetBalance(String scripthash) async {
     dynamic balance =
         await request('blockchain.scripthash.get_asset_balance', [scripthash]);
     return ScripthashAssetBalances(
-        balance['confirmed'], balance['unconfirmed']);
+      balance['confirmed'] as Map<String, int>,
+      balance['unconfirmed'] as Map<String, int>,
+    );
   }
 
   /// returns balances in the same order as scripthashes passed in

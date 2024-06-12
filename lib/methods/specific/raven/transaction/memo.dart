@@ -3,7 +3,7 @@
 /// use it to get the memo from a transaction, thus, I added this code to
 /// accomplish only that.
 
-import '../../electrum_adapter.dart';
+import 'package:electrum_adapter/electrum_adapter.dart';
 
 /// https://github.com/moontreeapp/moontree/issues/5
 /// we assume one transaction can only have one OP_RETURN
@@ -19,13 +19,14 @@ String parseAsmForMemo(String asm) {
 
 extension GetMemoMethod on RavenElectrumClient {
   Future<String> getMemo(String txHash) async {
-    var response = Map<String, dynamic>.from(await request(
+    var response = Map<String, dynamic>.from((await request(
       'blockchain.transaction.get',
       [txHash, true],
-    ));
+    )) as Map);
     if (response.keys.contains('vout')) {
       for (var asm in [
-        for (var vout in response['vout']) vout['scriptPubKey']['asm']
+        for (var vout in response['vout'] as List)
+          vout['scriptPubKey']['asm'] as String
       ]) {
         var ret = parseAsmForMemo(asm);
         if (ret != '') {

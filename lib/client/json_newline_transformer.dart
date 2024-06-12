@@ -2,10 +2,8 @@
 
 import 'dart:convert';
 
-import "dart:typed_data";
-
 import 'package:async/async.dart';
-
+import 'package:flutter/foundation.dart';
 import 'package:stream_channel/stream_channel.dart';
 
 /// A [StreamChannelTransformer] similar to the default jsonDocument
@@ -255,13 +253,13 @@ class _BuildJsonListener extends _JsonListener {
 
   @override
   void propertyName() {
-    key = value;
+    key = value as String;
     value = null;
   }
 
   @override
   void propertyValue() {
-    Map map = currentContainer;
+    Map<dynamic, dynamic> map = currentContainer as Map;
     map[key] = value;
     key = '';
     value = null;
@@ -275,7 +273,7 @@ class _BuildJsonListener extends _JsonListener {
   @override
   void beginArray() {
     pushContainer();
-    currentContainer = [];
+    currentContainer = <dynamic>[];
   }
 
   @override
@@ -303,7 +301,7 @@ class _ReviverJsonListener extends _BuildJsonListener {
 
   @override
   void arrayElement() {
-    List list = currentContainer;
+    List<dynamic> list = currentContainer as List;
     value = reviver(list.length, value);
     super.arrayElement();
   }
@@ -592,7 +590,7 @@ abstract class _ChunkedJsonParser<T> {
         // A partial number might be a valid number if we know it's done.
         // There is an unnecessary overhead if input is a single number,
         // but this is assumed to be rare.
-        _NumberBuffer buffer = this.buffer;
+        _NumberBuffer buffer = this.buffer as _NumberBuffer;
         this.buffer = null;
         finishChunkNumber(numState, 0, 0, buffer);
       } else if (partialType == PARTIAL_STRING) {
@@ -728,7 +726,7 @@ abstract class _ChunkedJsonParser<T> {
   int parsePartialNumber(int position, int state) {
     int start = position;
     // Primitive implementation, can be optimized.
-    _NumberBuffer buffer = this.buffer;
+    _NumberBuffer buffer = this.buffer as _NumberBuffer;
     this.buffer = null;
     int end = chunkEnd;
     toBailout:
@@ -1448,7 +1446,17 @@ abstract class _ChunkedJsonParser<T> {
     // If the value is outside the range +/-maxExactDouble or
     // exponent is outside the range +/-22, then we can't trust simple double
     // arithmetic to get the exact result, so we use the system double parsing.
-    listener.handleNumber(parseDouble(start, position));
+    //
+    // This can throw, but it seems safe to try-catch it and return the position
+    // calculated up to this point.
+    try {
+      listener.handleNumber(parseDouble(start, position));
+    } catch (e, s) {
+      if (kDebugMode) {
+        print("electrum_adapter: Error in parseNumber."
+            "\nError: ${e.toString()}\nStack trace: $s\nPosition: $position");
+      }
+    }
     return position;
   }
 
@@ -1495,25 +1503,25 @@ class _JsonStringParser extends _ChunkedJsonParser<String> {
 
   @override
   void addSliceToString(int start, int end) {
-    StringBuffer buffer = this.buffer;
+    StringBuffer buffer = this.buffer as StringBuffer;
     buffer.write(chunk.substring(start, end));
   }
 
   @override
   void addCharToString(int charCode) {
-    StringBuffer buffer = this.buffer;
+    StringBuffer buffer = this.buffer as StringBuffer;
     buffer.writeCharCode(charCode);
   }
 
   @override
   String endString() {
-    StringBuffer buffer = this.buffer;
+    StringBuffer buffer = this.buffer as StringBuffer;
     this.buffer = null;
     return buffer.toString();
   }
 
   @override
-  void copyCharsToList(int start, int end, List target, int offset) {
+  void copyCharsToList(int start, int end, List<dynamic> target, int offset) {
     int length = end - start;
     for (int i = 0; i < length; i++) {
       target[offset + i] = chunk.codeUnitAt(start + i);
@@ -1522,7 +1530,20 @@ class _JsonStringParser extends _ChunkedJsonParser<String> {
 
   @override
   double parseDouble(int start, int end) {
-    double? d = _parseDouble(chunk, start, end);
+    double? d;
+    // If chunk.substring(start, end) contains "e", it uses scientific notation.
+    // if (chunk.substring(start, end).contains("e")) {
+    try {
+      d = double.parse(chunk.substring(start, end));
+    } catch (e, s) {
+      if (kDebugMode) {
+        print("electrum_adapter: Error in parseDouble."
+            "\nError: ${e.toString()}\nStack trace: $s\nPosition: $start");
+      }
+    // } else {
+      d = _parseDouble(chunk, start, end);
+      // }
+    }
     if (d == null) {
       throw "Invalid double";
     }

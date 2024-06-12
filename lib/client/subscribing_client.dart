@@ -1,9 +1,9 @@
 import 'dart:async';
 
+import 'package:electrum_adapter/client/base_client.dart';
+import 'package:electrum_adapter/client/subscribable.dart';
 import 'package:json_rpc_2/json_rpc_2.dart';
-
-import 'base_client.dart';
-import 'subscribable.dart';
+import 'package:stream_channel/stream_channel.dart';
 
 export 'subscribable.dart';
 
@@ -17,9 +17,9 @@ void registerSubscribable(String methodPrefix, int paramsCount) {
 }
 
 class SubscribingClient extends BaseClient {
-  final Map<String, List<StreamController>> _subscriptions = {};
+  final Map<String, List<StreamController<dynamic>>> _subscriptions = {};
 
-  SubscribingClient(channel) : super(channel) {
+  SubscribingClient(StreamChannel<dynamic> channel) : super(channel) {
     // This "fallback" handles all valid notifications from the server
     peer.registerFallback((Parameters params) async {
       var methodPrefix = Subscribable.getMethodPrefix(params.method);
@@ -44,7 +44,7 @@ class SubscribingClient extends BaseClient {
   }
 
   StreamController<T> makeSubscription<T>(
-      Subscribable subscribable, List params) {
+      Subscribable subscribable, List<dynamic> params) {
     var key = subscribable.key(params);
     var controllers = _subscriptions[key];
     var newController = StreamController<T>();
@@ -58,7 +58,7 @@ class SubscribingClient extends BaseClient {
   }
 
   Future<Stream<T>> subscribe<T>(String methodPrefix,
-      [List params = const []]) async {
+      [List<dynamic> params = const []]) async {
     var subscribable = _subscribables[methodPrefix];
     if (subscribable == null) {
       throw RpcException.methodNotFound(methodPrefix);
@@ -66,14 +66,14 @@ class SubscribingClient extends BaseClient {
 
     var controller = makeSubscription<T>(subscribable, params);
     await request(subscribable.methodSubscribe, params).then((result) {
-      controller.sink.add(result);
+      controller.sink.add(result as T);
     });
 
     return controller.stream;
   }
 
   Stream<T> subscribeNonBatch<T>(String methodPrefix,
-      [List params = const []]) {
+      [List<dynamic> params = const []]) {
     var subscribable = _subscribables[methodPrefix];
     if (subscribable == null) {
       throw RpcException.methodNotFound(methodPrefix);
@@ -81,7 +81,7 @@ class SubscribingClient extends BaseClient {
 
     var controller = makeSubscription<T>(subscribable, params);
     request(subscribable.methodSubscribe, params).then((result) {
-      controller.sink.add(result);
+      controller.sink.add(result as T);
     });
 
     return controller.stream;

@@ -1,4 +1,4 @@
-import '../../electrum_adapter.dart';
+import 'package:electrum_adapter/electrum_adapter.dart';
 
 class ServerStats {
   late double ourCost;
@@ -47,17 +47,17 @@ extension GetOurStatsMethod on RavenElectrumClient {
     var proc = 'server.our_stats';
     dynamic stats = await request(proc);
     return ServerStats(
-      stats['our_cost'],
-      stats['hard_limit'],
-      stats['soft_limit'],
-      stats['cost_decay_per_sec'],
-      stats['bandwith_cost_per_byte'],
-      stats['sleep'],
-      stats['concurrent_requests'],
-      stats['send_size'],
-      stats['send_count'],
-      stats['receive_size'],
-      stats['receive_count'],
+      stats['our_cost'] as double,
+      stats['hard_limit'] as int,
+      stats['soft_limit'] as int,
+      stats['cost_decay_per_sec'] as double,
+      stats['bandwith_cost_per_byte'] as double,
+      stats['sleep'] as double,
+      stats['concurrent_requests'] as int,
+      stats['send_size'] as int,
+      stats['send_count'] as int,
+      stats['receive_size'] as int,
+      stats['receive_count'] as int,
     );
   }
 }

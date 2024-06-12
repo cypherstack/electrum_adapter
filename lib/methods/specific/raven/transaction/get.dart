@@ -1,6 +1,5 @@
+import 'package:electrum_adapter/electrum_adapter.dart';
 import 'package:equatable/equatable.dart';
-
-import '../../electrum_adapter.dart';
 
 /// scriptSig: {
 ///   asm: 30440220570e370c5d5f559bd37da3f6c463b09e4a61bb57237fead3aa5a3255f30fe09e022035038abb72ccd722700081088f3bf5aab4642fb66df4b79eab88c1d15d064f69[ALL] 03d957a7e1be52d731bcaa3fb0270dbadbe5a81fd7342f8710a70308435174febe,
@@ -136,35 +135,35 @@ class TxScriptPubKey with EquatableMixin {
 
   factory TxScriptPubKey.fromScriptPubKeyCoinbase(Map scriptPubKey) =>
       TxScriptPubKey(
-          asm: scriptPubKey['asm'],
-          hex: scriptPubKey['hex'],
-          type: scriptPubKey['type']);
+          asm: scriptPubKey['asm'] as String,
+          hex: scriptPubKey['hex'] as String,
+          type: scriptPubKey['type'] as String);
 
   factory TxScriptPubKey.fromScriptPubKeyTransaction(Map scriptPubKey) =>
       TxScriptPubKey(
-          asm: scriptPubKey['asm'],
-          hex: scriptPubKey['hex'],
-          type: scriptPubKey['type'],
-          reqSigs: scriptPubKey['reqSigs'],
-          assetMemo: scriptPubKey['message'],
+          asm: scriptPubKey['asm'] as String,
+          hex: scriptPubKey['hex'] as String,
+          type: scriptPubKey['type'] as String,
+          reqSigs: scriptPubKey['reqSigs'] as int?,
+          assetMemo: scriptPubKey['message'] as String,
           addresses: <String>[
-            for (String addr in scriptPubKey['addresses']) addr
+            for (String addr in scriptPubKey['addresses'] as List<String>) addr
           ]);
 
   factory TxScriptPubKey.fromScriptPubKeyNewAsset(Map scriptPubKey) =>
       TxScriptPubKey(
-        asm: scriptPubKey['asm'],
-        hex: scriptPubKey['hex'],
-        type: scriptPubKey['type'],
-        reqSigs: scriptPubKey['reqSigs'],
+        asm: scriptPubKey['asm'] as String,
+        hex: scriptPubKey['hex'] as String,
+        type: scriptPubKey['type'] as String,
+        reqSigs: scriptPubKey['reqSigs'] as int?,
         addresses: <String>[
-          for (String addr in scriptPubKey['addresses']) addr
+          for (String addr in scriptPubKey['addresses'] as List<String>) addr
         ],
-        asset: scriptPubKey['asset']['name'],
+        asset: scriptPubKey['asset']['name'] as String?,
         amount: scriptPubKey['asset']['amount'] as double,
-        units: scriptPubKey['asset']['units'] ?? 0,
-        reissuable: scriptPubKey['asset']['reissuable'] ?? 0,
-        ipfsHash: scriptPubKey['asset']['ipfs_hash'],
+        units: scriptPubKey['asset']['units'] as int? ?? 0,
+        reissuable: scriptPubKey['asset']['reissuable'] as int? ?? 0,
+        ipfsHash: scriptPubKey['asset']['ipfs_hash'] as String?,
       );
 
   @override
@@ -301,48 +300,51 @@ class Tx with EquatableMixin {
 
 extension GetTransactionMethod on RavenElectrumClient {
   Future<Tx> getTransaction(String txHash) async {
-    var response = Map<String, dynamic>.from(await request(
+    var response = Map<String, dynamic>.from((await request(
       'blockchain.transaction.get',
       [txHash, true],
-    ));
+    )) as Map);
     var vins = [
-      for (Map vin in response['vin'])
+      for (Map vin in response['vin'] as List<Map>)
         if (vin.keys.contains('coinbase'))
-          TxVin(coinbase: vin['coinbase'], sequence: vin['sequence'])
+          TxVin(
+            coinbase: vin['coinbase'] as String?,
+            sequence: vin['sequence'] as int?,
+          )
         else
           TxVin(
-              txid: vin['txid'],
-              vout: vin['vout'],
-              sequence: vin['sequence'],
+              txid: vin['txid'] as String?,
+              vout: vin['vout'] as int?,
+              sequence: vin['sequence'] as int?,
               scriptSig: TxScriptSig(
-                asm: vin['scriptSig']['asm'],
-                hex: vin['scriptSig']['hex'],
+                asm: vin['scriptSig']['asm'] as String,
+                hex: vin['scriptSig']['hex'] as String,
               ))
     ];
     var vouts = [
-      for (var vout in response['vout'])
+      for (var vout in response['vout'] as List)
         TxVout(
-            value: vout['value'],
-            n: vout['n'],
-            valueSat: vout['valueSat'],
+            value: vout['value'] as double,
+            n: vout['n'] as int,
+            valueSat: vout['valueSat'] as int,
             scriptPubKey:
                 TxScriptPubKey.fromScriptPubKey(vout['scriptPubKey'] as Map))
     ];
     return Tx(
-      txid: response['txid'],
-      hash: response['hash'],
-      version: response['version'],
-      size: response['size'],
-      vsize: response['vsize'],
-      locktime: response['locktime'],
+      txid: response['txid'] as String,
+      hash: response['hash'] as String,
+      version: response['version'] as int,
+      size: response['size'] as int,
+      vsize: response['vsize'] as int,
+      locktime: response['locktime'] as int,
       vin: vins,
       vout: vouts,
-      hex: response['hex'],
-      blockhash: response['blockhash'],
-      height: response['height'],
-      confirmations: response['confirmations'],
-      time: response['time'],
-      blocktime: response['blocktime'],
+      hex: response['hex'] as String,
+      blockhash: response['blockhash'] as String?,
+      height: response['height'] as int?,
+      confirmations: response['confirmations'] as int?,
+      time: response['time'] as int?,
+      blocktime: response['blocktime'] as int?,
       memo: null, // to be implemented - look for a blank vout with op return?
     );
   }

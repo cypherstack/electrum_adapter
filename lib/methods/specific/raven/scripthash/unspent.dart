@@ -1,6 +1,5 @@
+import 'package:electrum_adapter/electrum_adapter.dart';
 import 'package:equatable/equatable.dart';
-
-import '../../electrum_adapter.dart';
 
 class ScripthashUnspent with EquatableMixin {
   String scripthash;
@@ -33,17 +32,17 @@ class ScripthashUnspent with EquatableMixin {
 }
 
 extension GetUnspentMethod on RavenElectrumClient {
-  Future<List<ScripthashUnspent>> getUnspent(scripthash) async =>
+  Future<List<ScripthashUnspent>> getUnspent(String scripthash) async =>
       ((await request(
         'blockchain.scripthash.listunspent',
         [scripthash],
       ) as List<dynamic>)
           .map((res) => ScripthashUnspent(
               scripthash: scripthash,
-              height: res['height'],
-              txHash: res['tx_hash'],
-              txPos: res['tx_pos'],
-              value: res['value']))).toList();
+              height: res['height'] as int,
+              txHash: res['tx_hash'] as String,
+              txPos: res['tx_pos'] as int,
+              value: res['value'] as int))).toList();
 
   /// returns unspents in the same order as scripthashes passed in
   Future<List<List<ScripthashUnspent>>> getUnspents(
@@ -62,18 +61,18 @@ extension GetUnspentMethod on RavenElectrumClient {
     return results;
   }
 
-  Future<List<ScripthashUnspent>> getAssetUnspent(scripthash) async =>
+  Future<List<ScripthashUnspent>> getAssetUnspent(String scripthash) async =>
       ((await request(
         'blockchain.scripthash.listassets',
         [scripthash],
       ) as List<dynamic>)
           .map((res) => ScripthashUnspent(
               scripthash: scripthash,
-              height: res['height'],
-              txHash: res['tx_hash'],
-              txPos: res['tx_pos'],
-              value: res['value'],
-              symbol: res['name']))).toList();
+              height: res['height'] as int,
+              txHash: res['tx_hash'] as String,
+              txPos: res['tx_pos'] as int,
+              value: res['value'] as int,
+              symbol: res['name'] as String))).toList();
 
   /// returns unspents in the same order as scripthashes passed in
   Future<List<List<ScripthashUnspent>>> getAssetUnspents(
