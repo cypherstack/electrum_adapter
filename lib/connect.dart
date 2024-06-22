@@ -46,7 +46,7 @@ Future<StreamChannel> connect(
     socket = await SOCKSSocket.create(
       proxyHost: proxyInfo.host.address,
       proxyPort: proxyInfo.port,
-      sslEnabled: true,
+      sslEnabled: !proxyInfo.host.address.endsWith(".onion"),
     );
     await socket.connect();
 
