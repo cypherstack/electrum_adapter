@@ -17,7 +17,7 @@ dependencies:
   tor_ffi_plugin: # For embedded SOCKSSocket class.
     git:
       url: https://github.com/cypherstack/tor.git
-      ref: 88318df1993b46b51f880f77546fe08210a45e08
+      ref: 1e71dc8da0e50e2fb178d499f5fabd703bbc900e
   
 dev_dependencies:
   test: ^1.16.0
