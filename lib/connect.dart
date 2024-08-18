@@ -7,7 +7,7 @@ import 'package:json_rpc_2/src/utils.dart' as utils;
 
 import 'client/json_newline_transformer.dart';
 
-const connectionTimeout = Duration(seconds: 5);
+const connectionTimeout = Duration(seconds: 13);
 const aliveTimerDuration = Duration(seconds: 2);
 
 Future<StreamChannel> connect(
