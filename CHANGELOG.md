@@ -1,3 +1,13 @@
+## 3.0.1
+
+- Moved `lints` to dev deps.
+
+## 3.0.0
+
+- Rename package from ravencoin_electrum to electrum_adapter.
+- Generalize package to support multiple coins.
+- Fix and demonstrate Tor support.
+
 ## 2.0.0
 
 - Rename package from ravencoin_electrum_client to ravencoin_electrum
