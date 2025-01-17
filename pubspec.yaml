@@ -1,6 +1,6 @@
 name: electrum_adapter
 description: A client for ElectrumX servers
-version: 3.0.0
+version: 3.0.1
 homepage: https://github.com/cypherstack/electrum_adapter
 
 environment:
