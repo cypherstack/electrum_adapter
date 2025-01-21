@@ -1,9 +1,9 @@
 // ignore_for_file: constant_identifier_names
 
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:async/async.dart';
-import 'package:flutter/foundation.dart';
 import 'package:stream_channel/stream_channel.dart';
 
 /// A [StreamChannelTransformer] similar to the default jsonDocument
@@ -1452,10 +1452,10 @@ abstract class _ChunkedJsonParser<T> {
     try {
       listener.handleNumber(parseDouble(start, position));
     } catch (e, s) {
-      if (kDebugMode) {
-        print("electrum_adapter: Error in parseNumber."
-            "\nError: ${e.toString()}\nStack trace: $s\nPosition: $position");
-      }
+      // if (kDebugMode) {
+      //   print("electrum_adapter: Error in parseNumber."
+      //       "\nError: ${e.toString()}\nStack trace: $s\nPosition: $position");
+      // }
     }
     return position;
   }
@@ -1536,11 +1536,11 @@ class _JsonStringParser extends _ChunkedJsonParser<String> {
     try {
       d = double.parse(chunk.substring(start, end));
     } catch (e, s) {
-      if (kDebugMode) {
-        print("electrum_adapter: Error in parseDouble."
-            "\nError: ${e.toString()}\nStack trace: $s\nPosition: $start");
-      }
-    // } else {
+      // if (kDebugMode) {
+      //   print("electrum_adapter: Error in parseDouble."
+      //       "\nError: ${e.toString()}\nStack trace: $s\nPosition: $start");
+      // }
+      // } else {
       d = _parseDouble(chunk, start, end);
       // }
     }

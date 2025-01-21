@@ -1,3 +1,7 @@
+## 3.0.2
+
+- Moved `tor_plugin_ffi` to dev deps.
+
 ## 3.0.1
 
 - Moved `lints` to dev deps.
