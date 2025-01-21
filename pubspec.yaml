@@ -4,7 +4,7 @@ version: 3.0.2
 homepage: https://github.com/cypherstack/electrum_adapter
 
 environment:
-  sdk: '>3.0.0'
+  sdk: ^3.0.0
 
 dependencies:
   async: ^2.9.0
