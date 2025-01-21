@@ -6,8 +6,8 @@ import 'dart:io';
 import 'package:electrum_adapter/client/json_newline_transformer.dart';
 // ignore: implementation_imports
 import 'package:json_rpc_2/src/utils.dart' as utils;
+import 'package:socks_socket/socks_socket.dart';
 import 'package:stream_channel/stream_channel.dart';
-import 'package:tor_ffi_plugin/socks_socket.dart';
 
 const connectionTimeout = Duration(seconds: 5);
 const aliveTimerDuration = Duration(seconds: 2);
