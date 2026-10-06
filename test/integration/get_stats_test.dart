@@ -8,7 +8,9 @@ import 'package:electrum_adapter/electrum_adapter.dart';
 void main() {
   group('electrum_client', () {
     test('get our stats', () async {
-      var client = await RavenElectrumClient.connect('testnet.rvn.rocks');
+      // testnet.rvn.rocks's certificate has expired.
+      var client = await RavenElectrumClient.connect('testnet.rvn.rocks',
+          acceptUnverified: true);
       var stats = await client.getOurStats();
       expect(stats, isA<ServerStats>());
     });

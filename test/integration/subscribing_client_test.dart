@@ -18,7 +18,9 @@ void main() {
       // var channel = await connect('168.119.100.140', port: 50012);
 
       // HyperPeek's testnet server:
-      var channel = await connect('testnet.rvn.rocks', port: 50002);
+      // testnet.rvn.rocks's certificate has expired.
+      var channel = await connect('testnet.rvn.rocks',
+          port: 50002, acceptUnverified: true);
 
       client = SubscribingClient(channel);
     });

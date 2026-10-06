@@ -104,6 +104,11 @@ void main() {
       await expectLater(open(null), throwsA(isA<HandshakeException>()));
     });
 
+    test('rejects an unverified certificate by default', () async {
+      await expectLater(connect('localhost', port: server.port),
+          throwsA(isA<HandshakeException>()));
+    });
+
     test('enforces the context even when accepting unverified certificates',
         () async {
       await expectLater(

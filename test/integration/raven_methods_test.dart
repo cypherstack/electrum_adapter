@@ -8,8 +8,9 @@ void main() {
   group('assets', () {
     late RavenElectrumClient client;
     setUp(() async {
-      client =
-          await RavenElectrumClient.connect('testnet.rvn.rocks', port: 50002);
+      // testnet.rvn.rocks's certificate has expired.
+      client = await RavenElectrumClient.connect('testnet.rvn.rocks',
+          port: 50002, acceptUnverified: true);
     });
     tearDown(() => client.close());
 

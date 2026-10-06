@@ -8,7 +8,9 @@ void main() {
   group('electrum_client', () {
     late RavenElectrumClient client;
     setUp(() async {
-      client = await RavenElectrumClient.connect('testnet.rvn.rocks');
+      // testnet.rvn.rocks's certificate has expired.
+      client = await RavenElectrumClient.connect('testnet.rvn.rocks',
+          acceptUnverified: true);
     });
     tearDown(() => client.close());
 
