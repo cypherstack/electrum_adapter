@@ -10,8 +10,7 @@ void main() {
     test('get our stats', () async {
       var client = await RavenElectrumClient.connect('testnet.rvn.rocks');
       var stats = await client.getOurStats();
-      print(stats);
-      expect(stats == null, true);
+      expect(stats, isA<ServerStats>());
     });
   });
 }
