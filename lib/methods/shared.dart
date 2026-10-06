@@ -6,8 +6,21 @@ extension SharedMethods on ElectrumClient {
   Future<Map<String, dynamic>> features() async =>
       (await request('server.features')) as Map<String, dynamic>;
 
-  Future<Map<String, dynamic>> serverVersion() async =>
-      (await request('server.version')) as Map<String, dynamic>;
+  /// Returns the server software version and the negotiated protocol version.
+  ///
+  /// Sends [clientName] and [protocolVersion] when given; without a
+  /// [protocolVersion] the server uses its default, 1.4 on current ElectrumX.
+  Future<List<String>> serverVersion(
+      {String? clientName, String? protocolVersion}) async {
+    final params = [
+      if (clientName != null || protocolVersion != null) clientName ?? '',
+      if (protocolVersion != null) protocolVersion,
+    ];
+    final reply =
+        await request('server.version', params.isEmpty ? null : params)
+            as List<dynamic>;
+    return reply.cast<String>();
+  }
 
   Future<String> broadcastTransaction(String rawTx) async => await request(
         'blockchain.transaction.broadcast',

@@ -1,3 +1,6 @@
+@Tags(['integration'])
+library;
+
 import 'package:electrum_adapter/client/base_client.dart';
 import 'package:electrum_adapter/electrum_adapter.dart';
 import 'package:electrum_adapter/methods/specific/firo.dart';
@@ -8,6 +11,7 @@ void main() {
     test('connects', () async {
       var channel = await connect('firo.stackwallet.com');
       var client = BaseClient(channel);
+      await client.request('server.version');
       var response = await client.request('server.features');
       expect(response['genesis_hash'],
           '4381deb85b1b2c9843c222944b616d997516dcbd6a964e1eaf0def0830695233');
@@ -19,8 +23,7 @@ void main() {
         "b476ed2b374bb081ea51d111f68f0136252521214e213d119b8dc67b92f5a390"; // TODO provide valid example.
 
     test('get full spark anonymity set', () async {
-      var channel = await connect('firo.stackwallet.com');
-      var client = FiroElectrumClient(channel);
+      var client = await FiroElectrumClient.connect('firo.stackwallet.com');
       var response = await client.getSparkAnonymitySet();
 
       // Following assertions are true as of 2024/02/12:
@@ -48,8 +51,7 @@ void main() {
     int latestCoinId = 0;
 
     test('get spark latest coin id', () async {
-      var channel = await connect('firo.stackwallet.com');
-      var client = FiroElectrumClient(channel);
+      var client = await FiroElectrumClient.connect('firo.stackwallet.com');
       var response = await client.getSparkLatestCoinId();
 
       expect(response.runtimeType, int);
@@ -61,8 +63,7 @@ void main() {
     /*
     // Enable with params which return less than the full set.
     test('get partial spark anonymity set', () async {
-      var channel = await connect('firo.stackwallet.com');
-      var client = FiroElectrumClient(channel);
+      var client = await FiroElectrumClient.connect('firo.stackwallet.com');
       var response = await client.getSparkAnonymitySet(
           coinGroupId: "$latestCoinId",
           startBlockHash:
@@ -73,8 +74,7 @@ void main() {
 
     // Enable with valid param.
     test('get spark mint meta data', () async {
-      var channel = await connect('firo.stackwallet.com');
-      var client = FiroElectrumClient(channel);
+      var client = await FiroElectrumClient.connect('firo.stackwallet.com');
       var response = await client.getSparkMintMetaData(
         sparkCoinHashes: [
           sparkCoinHash,
@@ -84,8 +84,7 @@ void main() {
     });
 
     test('get used coins tags', () async {
-      var channel = await connect('firo.stackwallet.com');
-      var client = FiroElectrumClient(channel);
+      var client = await FiroElectrumClient.connect('firo.stackwallet.com');
       var response = await client.getUsedCoinsTags(startNumber: 0);
 
       expect(response.containsKey("tags"), true);
@@ -109,8 +108,7 @@ void main() {
 
   group('FiroElectrumClient Lelantus tests', () {
     test('get lelantus anonymity set', () async {
-      var channel = await connect('firo.stackwallet.com');
-      var client = FiroElectrumClient(channel);
+      var client = await FiroElectrumClient.connect('firo.stackwallet.com');
       var response = await client.getLelantusAnonymitySet();
 
       expect(response.containsKey("blockHash"), true);
@@ -129,8 +127,7 @@ void main() {
 
     /*
     test('get lelantus mint data', () async {
-      var channel = await connect('firo.stackwallet.com');
-      var client = FiroElectrumClient(channel);
+      var client = await FiroElectrumClient.connect('firo.stackwallet.com');
       var response = await client.getLelantusMintData(
         mints: [
           "b476ed2b374bb081ea51d111f68f0136252521214e213d119b8dc67b92f5a390",
@@ -141,8 +138,7 @@ void main() {
      */
 
     test('get lelantus used coin serials', () async {
-      var channel = await connect('firo.stackwallet.com');
-      var client = FiroElectrumClient(channel);
+      var client = await FiroElectrumClient.connect('firo.stackwallet.com');
       var response = await client.getLelantusUsedCoinSerials(
         startNumber: 0,
       );
@@ -152,12 +148,13 @@ void main() {
     });
 
     test('get lelantus latest coin id', () async {
-      var channel = await connect('firo.stackwallet.com');
-      var client = FiroElectrumClient(channel);
+      var client = await FiroElectrumClient.connect('firo.stackwallet.com');
       var response = await client.getLatestCoinId();
 
       expect(response.runtimeType, int);
       expect(response >= 2, true);
     });
-  });
+  },
+      skip: 'Firo removed Lelantus; servers now reject these methods with '
+          '"Lelantus has been removed".');
 }

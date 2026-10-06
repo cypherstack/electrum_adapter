@@ -145,9 +145,9 @@ class TxScriptPubKey with EquatableMixin {
           hex: scriptPubKey['hex'] as String,
           type: scriptPubKey['type'] as String,
           reqSigs: scriptPubKey['reqSigs'] as int?,
-          assetMemo: scriptPubKey['message'] as String,
+          assetMemo: scriptPubKey['message'] as String?,
           addresses: <String>[
-            for (String addr in scriptPubKey['addresses'] as List<String>) addr
+            ...(scriptPubKey['addresses'] as List).cast<String>()
           ]);
 
   factory TxScriptPubKey.fromScriptPubKeyNewAsset(Map scriptPubKey) =>
@@ -157,7 +157,7 @@ class TxScriptPubKey with EquatableMixin {
         type: scriptPubKey['type'] as String,
         reqSigs: scriptPubKey['reqSigs'] as int?,
         addresses: <String>[
-          for (String addr in scriptPubKey['addresses'] as List<String>) addr
+          ...(scriptPubKey['addresses'] as List).cast<String>()
         ],
         asset: scriptPubKey['asset']['name'] as String?,
         amount: scriptPubKey['asset']['amount'] as double,
@@ -172,15 +172,8 @@ class TxScriptPubKey with EquatableMixin {
       'addresses: $addresses, asset: $asset, amount: $amount, units: $units, '
       'reissuable: $reissuable, assetMemo: $assetMemo, ipfsHash: $ipfsHash)';
 
-  String? get memo {
-    var x = asm.split(' ');
-    var i = 0;
-    for (var item in x) {
-      if (item == 'OP_RETURN') return hex.substring(2);
-      i = i + 1;
-    }
-    return null;
-  }
+  /// The data pushed after OP_RETURN; see [memoFromScript].
+  String? get memo => memoFromScript(hex);
 
   /// not used - getMeta is used in preference to this
   Map<String, dynamic> get assetData => type == 'new_asset'
@@ -305,7 +298,7 @@ extension GetTransactionMethod on RavenElectrumClient {
       [txHash, true],
     )) as Map);
     var vins = [
-      for (Map vin in response['vin'] as List<Map>)
+      for (var vin in (response['vin'] as List).cast<Map>())
         if (vin.keys.contains('coinbase'))
           TxVin(
             coinbase: vin['coinbase'] as String?,

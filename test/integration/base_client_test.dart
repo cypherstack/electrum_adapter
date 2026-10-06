@@ -1,3 +1,6 @@
+@Tags(['integration'])
+library;
+
 import 'package:test/test.dart';
 import 'package:electrum_adapter/connect.dart';
 import 'package:electrum_adapter/client/base_client.dart';
@@ -5,7 +8,8 @@ import 'package:electrum_adapter/client/base_client.dart';
 void main() {
   group('BaseClient', () {
     test('connects', () async {
-      var channel = await connect('testnet.rvn.rocks');
+      // testnet.rvn.rocks's certificate has expired.
+      var channel = await connect('testnet.rvn.rocks', acceptUnverified: true);
       var client = BaseClient(channel);
       var response = await client.request('server.features');
       expect(response['genesis_hash'],

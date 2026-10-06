@@ -54,9 +54,10 @@ class ElectrumClient extends SubscribingClient {
     required int port,
     Duration connectionTimeout = conn.connectionTimeout,
     Duration aliveTimerDuration = conn.aliveTimerDuration,
-    bool acceptUnverified = true,
+    bool acceptUnverified = false,
     bool useSSL = true,
     ({InternetAddress host, int port})? proxyInfo,
+    SecurityContext? securityContext,
   }) async {
     final client = ElectrumClient(
       await conn.connect(
@@ -67,6 +68,7 @@ class ElectrumClient extends SubscribingClient {
         acceptUnverified: acceptUnverified,
         useSSL: useSSL,
         proxyInfo: proxyInfo,
+        securityContext: securityContext,
       ),
       host,
       port,
@@ -90,19 +92,21 @@ class FiroElectrumClient extends ElectrumClient {
       : super(channel, host, port, useSSL, proxyInfo);
   String clientName = 'electrum_adapter';
   String clientVersion = '2.0';
-  String protocolVersion = '1.10';
+  // Firo servers speak protocol 1.4 to 1.6 and reject 1.10.
+  String protocolVersion = '1.4';
 
   static Future<FiroElectrumClient> connect(
     String host, {
     int port = 50002,
     Duration connectionTimeout = conn.connectionTimeout,
     Duration aliveTimerDuration = conn.aliveTimerDuration,
-    bool acceptUnverified = true,
+    bool acceptUnverified = false,
     String clientName = 'electrum_adapter',
     String clientVersion = '2.0',
-    String protocolVersion = '1.10',
+    String protocolVersion = '1.4',
     bool useSSL = true,
     ({InternetAddress host, int port})? proxyInfo,
+    SecurityContext? securityContext,
   }) async {
     var client = FiroElectrumClient(
       await conn.connect(
@@ -113,6 +117,7 @@ class FiroElectrumClient extends ElectrumClient {
         acceptUnverified: acceptUnverified,
         useSSL: useSSL,
         proxyInfo: proxyInfo,
+        securityContext: securityContext,
       ),
       host,
       port,
@@ -120,12 +125,11 @@ class FiroElectrumClient extends ElectrumClient {
       proxyInfo,
     );
     client.clientName = clientName;
+    client.clientVersion = clientVersion;
     client.protocolVersion = protocolVersion;
     await client.serverVersion(
-        /*
         clientName: '$clientName/$clientVersion',
-        protocolVersion: protocolVersion*/
-        );
+        protocolVersion: protocolVersion);
     return client;
   }
 
@@ -144,6 +148,8 @@ class RavenElectrumClient extends ElectrumClient {
       : super(channel, host, port, useSSL, proxyInfo);
   String clientName = 'MTWallet';
   String clientVersion = '1.0';
+
+  /// The protocol version the server agreed to in [connect].
   String protocolVersion = '1.10';
 
   static Future<RavenElectrumClient> connect(
@@ -151,10 +157,12 @@ class RavenElectrumClient extends ElectrumClient {
     int port = 50002,
     Duration connectionTimeout = conn.connectionTimeout,
     Duration aliveTimerDuration = conn.aliveTimerDuration,
-    bool acceptUnverified = true,
+    bool acceptUnverified = false,
     String clientName = 'MTWallet',
     String clientVersion = '1.0',
+    String? minProtocolVersion = '1.4',
     String protocolVersion = '1.10',
+    SecurityContext? securityContext,
   }) async {
     var client = RavenElectrumClient(
       await conn.connect(
@@ -163,15 +171,18 @@ class RavenElectrumClient extends ElectrumClient {
         connectionTimeout: connectionTimeout,
         aliveTimerDuration: aliveTimerDuration,
         acceptUnverified: acceptUnverified,
+        securityContext: securityContext,
       ),
       host: host,
       port: port,
     );
     client.clientName = clientName;
-    client.protocolVersion = protocolVersion;
-    await client.serverVersion(
+    client.clientVersion = clientVersion;
+    final version = await client.serverVersion(
         clientName: '$clientName/$clientVersion',
+        minProtocolVersion: minProtocolVersion,
         protocolVersion: protocolVersion);
+    client.protocolVersion = version.protocol;
     return client;
   }
 

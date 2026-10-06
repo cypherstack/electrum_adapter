@@ -12,22 +12,33 @@ import 'package:stream_channel/stream_channel.dart';
 const connectionTimeout = Duration(seconds: 5);
 const aliveTimerDuration = Duration(seconds: 2);
 
+/// [acceptUnverified] accepts any certificate on a direct TLS connection,
+/// which lets anyone on the path impersonate the server; certificates are
+/// always verified through a proxy.
+///
+/// [securityContext] sets the certificates trusted for TLS, such as a server's
+/// self-signed certificate; null uses the platform's trusted roots. A given
+/// [securityContext] is always enforced, even when [acceptUnverified] is true.
+/// On macOS and iOS the certificate must also list the serverAuth extended
+/// key usage.
 Future<StreamChannel> connect(
   String host, {
   int port = 50002,
   Duration connectionTimeout = connectionTimeout,
   Duration aliveTimerDuration = aliveTimerDuration,
-  bool acceptUnverified = true,
+  bool acceptUnverified = false,
   bool useSSL = true,
   ({InternetAddress host, int port})? proxyInfo,
+  SecurityContext? securityContext,
 }) async {
   var socket;
   if (proxyInfo == null) {
     if (useSSL) {
       socket = await io.SecureSocket.connect(host, port,
           timeout: connectionTimeout,
-          onBadCertificate: acceptUnverified ? (_) => true : null);
-      // TODO do not automatically accept unverified certificates.
+          context: securityContext,
+          onBadCertificate:
+              acceptUnverified && securityContext == null ? (_) => true : null);
     } else {
       socket = await io.Socket.connect(host, port, timeout: connectionTimeout);
     }
@@ -47,14 +58,19 @@ Future<StreamChannel> connect(
       proxyHost: proxyInfo.host.address,
       proxyPort: proxyInfo.port,
       sslEnabled: useSSL,
+      securityContext: securityContext,
     );
     await socket.connect();
 
     // Then connect to destination host.
     await socket.connectTo(host, port);
 
-    var channel = StreamChannel(socket.inputStream as Stream<dynamic>,
-        socket.outputStream as StreamSink<dynamic>);
+    final proxied = socket as SOCKSSocket;
+    final output = proxied.outputStream;
+    // Closing the output only drains it, so close the connection as well.
+    output.done.whenComplete(proxied.close).ignore();
+    var channel = StreamChannel(
+        proxied.inputStream as Stream<dynamic>, output as StreamSink<dynamic>);
     var channelUtf8 =
         channel.transform(StreamChannelTransformer.fromCodec(convert.utf8));
     var channelJson = jsonNewlineDocument

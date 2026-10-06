@@ -1,21 +1,24 @@
-// dart --sound-null-safety test test/integration/get_stats_test.dart --concurrency=1
+@Tags(['integration'])
+library;
+
 import 'package:test/test.dart';
 import 'package:electrum_adapter/electrum_adapter.dart';
 
 void main() {
   group('electrum_client', () {
     test('get our asset addresses', () async {
-      //var client = await RavenElectrumClient.connect('rvn4lyfe.com'); // mainnet
       var client =
           await RavenElectrumClient.connect('electrum1.rvn.rocks'); // mainnet
+      addTearDown(client.close);
       var addresses = await client.getAddresses('CATE');
-      print(addresses);
       expect(addresses!.owner, '');
       addresses = await client.getAddresses('CATE!');
-      print(addresses);
       // will fail if CATE! changes ownership...
       expect(addresses!.owner, 'RWaahojLNr4VCQ8j9hwndqfA1UuzN3tanW');
-      //AssetAddresses(assetCountByAddress: {RWaahojLNr4VCQ8j9hwndqfA1UuzN3tanW: 1})
-    });
+    },
+        skip: 'No reachable server answers '
+            'blockchain.asset.list_addresses_by_asset: electrum1.rvn.rocks '
+            'refuses connections, electrum1.cipig.net lacks the asset methods '
+            'and testnet.rvn.rocks replies "server busy - request timed out".');
   });
 }

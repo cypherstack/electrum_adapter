@@ -1,3 +1,6 @@
+@Tags(['integration'])
+library;
+
 import 'package:test/test.dart';
 
 import 'package:electrum_adapter/electrum_adapter.dart';
@@ -16,7 +19,9 @@ void main() {
       // var channel = await connect('168.119.100.140', port: 50012);
 
       // HyperPeek's testnet server:
-      var channel = await connect('testnet.rvn.rocks', port: 50002);
+      // testnet.rvn.rocks's certificate has expired.
+      var channel = await connect('testnet.rvn.rocks',
+          port: 50002, acceptUnverified: true);
       //var channel = await connect('mainnet.rvn.rocks', port: 50002);
 
       client = RavenElectrumClient(channel);
@@ -73,21 +78,27 @@ void main() {
       expect(result,
           '615dd2dec158d531d2875cee60c37e9e72f264d221a267a9ab512e0741ba4eb4');
     });
+  });
+
+  group('electrum_client on mainnet', () {
+    late RavenElectrumClient client;
+    setUp(() async {
+      // The testnet daemon no longer answers transaction requests, so read a
+      // mainnet coinbase, which carries the same witness commitment memo.
+      client = await RavenElectrumClient.connect('electrum1.cipig.net',
+          port: 20051, protocolVersion: '1.4');
+    });
+    tearDown(() => client.close());
 
     test('get transaction', () async {
-      //var ret = await client.request('blockchain.transaction.get', [
-      //  'a66d891a144bdb00610c31655d7c6046b70700a4dcc2964430cbd49348f05948',
-      //  true
-      //]);
-      //print(ret);
       var results = await client.getTransaction(
-          'e86f693b46f1ca33480d904acd526079ba7585896cff6d0ae5dcef322d9dc52a');
+          '5bd67190fb59b15e7bfbfffb6e444bef4fab1af3aed674325e612fe3f2486fe6');
       expect(results.toString(),
-          'Transaction(txid: e86f693b46f1ca33480d904acd526079ba7585896cff6d0ae5dcef322d9dc52a, hash: ccabf8580cc55890cba647960bf52760f37caf1923b2f184198e424fd356e3d2, blockhash: 00000000e2ba484f128e5fff2d767f2d55d035a3d5e797081673c6f8886e58d9, blocktime: 1633390166, confirmations: ${results.confirmations}, height: 918159, hex: 020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff05038f020e00ffffffff020088526a740000001976a914713c2fa8992630a215bc6668822b0acfbc90ead988ac0000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf90120000000000000000000000000000000000000000000000000000000000000000000000000, locktime: 0, size: 173, vsize: 146, time: 1633390166, txid: e86f693b46f1ca33480d904acd526079ba7585896cff6d0ae5dcef322d9dc52a, version: 2, vin: [TxVin(038f020e00, 4294967295, null, null, null)], vout: [TxVout(5000.0, 0, 500000000000, TxScriptPubKey(OP_DUP OP_HASH160 713c2fa8992630a215bc6668822b0acfbc90ead9 OP_EQUALVERIFY OP_CHECKSIG, 76a914713c2fa8992630a215bc6668822b0acfbc90ead988ac, pubkeyhash, 1, [mqqgkYDUkLRLMPvHKhDSjyuwyeNqZhfzVc])), TxVout(0.0, 1, 0, TxScriptPubKey(OP_RETURN aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf9, 6a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf9, nulldata, null, null))])');
+          'Transaction(txid: 5bd67190fb59b15e7bfbfffb6e444bef4fab1af3aed674325e612fe3f2486fe6, hash: a3896d4c7ce3b2224ada5a852259523a83c5e02cb8d0eda5c5a463d65496b2a6, blockhash: 0000000000007d69bf8de4ad59368871dfc340bebdb2dd2ff81689c3459e2e3a, blocktime: 1726449055, confirmations: ${results.confirmations}, height: 3500000, hex: 010000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff2e03e06735049f85e7660406b6c72f000000001b324d696e6572732068747470733a2f2f326d696e6572732e636f6dffffffff02004429353a0000001976a91459d584c2da3735f24af4ed3eb8e2abeb63fbffd688ac0000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf90120000000000000000000000000000000000000000000000000000000000000000000000000, locktime: 0, size: 214, vsize: 187, time: 1726449055, version: 1, memo: null, vin: [TxVin(03e06735049f85e7660406b6c72f000000001b324d696e6572732068747470733a2f2f326d696e6572732e636f6d, 4294967295, null, null, null)], vout: [TxVout(2500.0, 0, 250000000000, TxScriptPubKey(asm: OP_DUP OP_HASH160 59d584c2da3735f24af4ed3eb8e2abeb63fbffd6 OP_EQUALVERIFY OP_CHECKSIG, hex: 76a91459d584c2da3735f24af4ed3eb8e2abeb63fbffd688ac, type: pubkeyhash, reqSigs: 1, addresses: [RHUC17zAVjNqXDtkqwLPRvQ2XgoRZsXeeG], asset: null, amount: 0.0, units: null, reissuable: null, assetMemo: null, ipfsHash: null)), TxVout(0.0, 1, 0, TxScriptPubKey(asm: OP_RETURN aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf9, hex: 6a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf9, type: nulldata, reqSigs: null, addresses: null, asset: null, amount: 0.0, units: null, reissuable: null, assetMemo: null, ipfsHash: null))])');
     });
     test('get memo', () async {
       var results = await client.getMemo(
-          'e86f693b46f1ca33480d904acd526079ba7585896cff6d0ae5dcef322d9dc52a');
+          '5bd67190fb59b15e7bfbfffb6e444bef4fab1af3aed674325e612fe3f2486fe6');
       expect(results.toString(),
           'aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf9');
     });
