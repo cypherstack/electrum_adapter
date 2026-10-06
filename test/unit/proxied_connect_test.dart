@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:electrum_adapter/client/base_client.dart';
 import 'package:electrum_adapter/connect.dart';
 import 'package:test/test.dart';
 
@@ -59,5 +60,38 @@ void main() {
     await replies;
     expect(
         await received.future.timeout(const Duration(seconds: 10)), expected);
+  });
+
+  test('closing the client closes the proxied connection', () async {
+    final proxy = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(proxy.close);
+    final closed = Completer<void>();
+    // A SOCKS5 proxy that reports when the client ends the connection.
+    proxy.listen((peer) {
+      final buffer = <int>[];
+      var tunnel = false;
+      peer.listen((bytes) {
+        if (tunnel) return;
+        buffer.addAll(bytes);
+        if (buffer.length == 3) {
+          peer.add([5, 0]);
+        } else if (buffer.length > 8 && buffer.length == 10 + buffer[7]) {
+          tunnel = true;
+          peer.add([5, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
+        }
+      }, onDone: () {
+        if (!closed.isCompleted) closed.complete();
+        peer.destroy();
+      });
+    });
+
+    final client = BaseClient(await connect(
+      'localhost',
+      port: 50001,
+      useSSL: false,
+      proxyInfo: (host: InternetAddress.loopbackIPv4, port: proxy.port),
+    ));
+    await client.close();
+    await closed.future.timeout(const Duration(seconds: 5));
   });
 }

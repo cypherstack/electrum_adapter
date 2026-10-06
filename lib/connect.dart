@@ -62,8 +62,12 @@ Future<StreamChannel> connect(
     // Then connect to destination host.
     await socket.connectTo(host, port);
 
-    var channel = StreamChannel(socket.inputStream as Stream<dynamic>,
-        socket.outputStream as StreamSink<dynamic>);
+    final proxied = socket as SOCKSSocket;
+    final output = proxied.outputStream;
+    // Closing the output only drains it, so close the connection as well.
+    output.done.whenComplete(proxied.close).ignore();
+    var channel = StreamChannel(
+        proxied.inputStream as Stream<dynamic>, output as StreamSink<dynamic>);
     var channelUtf8 =
         channel.transform(StreamChannelTransformer.fromCodec(convert.utf8));
     var channelJson = jsonNewlineDocument
