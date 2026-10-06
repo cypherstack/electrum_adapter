@@ -53,7 +53,7 @@ class BaseClient {
   }
 
   void handleError(dynamic error, dynamic trace) {
-    print(error + ' 1');
+    print(error);
     final simpleTrace = Trace.from(trace as StackTrace);
     print(simpleTrace.terse);
   }
