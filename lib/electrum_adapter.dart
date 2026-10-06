@@ -57,6 +57,7 @@ class ElectrumClient extends SubscribingClient {
     bool acceptUnverified = true,
     bool useSSL = true,
     ({InternetAddress host, int port})? proxyInfo,
+    SecurityContext? securityContext,
   }) async {
     final client = ElectrumClient(
       await conn.connect(
@@ -67,6 +68,7 @@ class ElectrumClient extends SubscribingClient {
         acceptUnverified: acceptUnverified,
         useSSL: useSSL,
         proxyInfo: proxyInfo,
+        securityContext: securityContext,
       ),
       host,
       port,
@@ -103,6 +105,7 @@ class FiroElectrumClient extends ElectrumClient {
     String protocolVersion = '1.10',
     bool useSSL = true,
     ({InternetAddress host, int port})? proxyInfo,
+    SecurityContext? securityContext,
   }) async {
     var client = FiroElectrumClient(
       await conn.connect(
@@ -113,6 +116,7 @@ class FiroElectrumClient extends ElectrumClient {
         acceptUnverified: acceptUnverified,
         useSSL: useSSL,
         proxyInfo: proxyInfo,
+        securityContext: securityContext,
       ),
       host,
       port,
@@ -155,6 +159,7 @@ class RavenElectrumClient extends ElectrumClient {
     String clientName = 'MTWallet',
     String clientVersion = '1.0',
     String protocolVersion = '1.10',
+    SecurityContext? securityContext,
   }) async {
     var client = RavenElectrumClient(
       await conn.connect(
@@ -163,6 +168,7 @@ class RavenElectrumClient extends ElectrumClient {
         connectionTimeout: connectionTimeout,
         aliveTimerDuration: aliveTimerDuration,
         acceptUnverified: acceptUnverified,
+        securityContext: securityContext,
       ),
       host: host,
       port: port,

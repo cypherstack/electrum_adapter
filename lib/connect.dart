@@ -12,6 +12,11 @@ import 'package:stream_channel/stream_channel.dart';
 const connectionTimeout = Duration(seconds: 5);
 const aliveTimerDuration = Duration(seconds: 2);
 
+/// [securityContext] sets the certificates trusted for TLS, such as a server's
+/// self-signed certificate; null uses the platform's trusted roots. A given
+/// [securityContext] is always enforced, even when [acceptUnverified] is true.
+/// On macOS and iOS the certificate must also list the serverAuth extended
+/// key usage.
 Future<StreamChannel> connect(
   String host, {
   int port = 50002,
@@ -20,13 +25,16 @@ Future<StreamChannel> connect(
   bool acceptUnverified = true,
   bool useSSL = true,
   ({InternetAddress host, int port})? proxyInfo,
+  SecurityContext? securityContext,
 }) async {
   var socket;
   if (proxyInfo == null) {
     if (useSSL) {
       socket = await io.SecureSocket.connect(host, port,
           timeout: connectionTimeout,
-          onBadCertificate: acceptUnverified ? (_) => true : null);
+          context: securityContext,
+          onBadCertificate:
+              acceptUnverified && securityContext == null ? (_) => true : null);
       // TODO do not automatically accept unverified certificates.
     } else {
       socket = await io.Socket.connect(host, port, timeout: connectionTimeout);
@@ -47,6 +55,7 @@ Future<StreamChannel> connect(
       proxyHost: proxyInfo.host.address,
       proxyPort: proxyInfo.port,
       sslEnabled: useSSL,
+      securityContext: securityContext,
     );
     await socket.connect();
 
