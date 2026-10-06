@@ -92,7 +92,8 @@ class FiroElectrumClient extends ElectrumClient {
       : super(channel, host, port, useSSL, proxyInfo);
   String clientName = 'electrum_adapter';
   String clientVersion = '2.0';
-  String protocolVersion = '1.10';
+  // Firo servers speak protocol 1.4 to 1.6 and reject 1.10.
+  String protocolVersion = '1.4';
 
   static Future<FiroElectrumClient> connect(
     String host, {
@@ -102,7 +103,7 @@ class FiroElectrumClient extends ElectrumClient {
     bool acceptUnverified = true,
     String clientName = 'electrum_adapter',
     String clientVersion = '2.0',
-    String protocolVersion = '1.10',
+    String protocolVersion = '1.4',
     bool useSSL = true,
     ({InternetAddress host, int port})? proxyInfo,
     SecurityContext? securityContext,
@@ -124,12 +125,11 @@ class FiroElectrumClient extends ElectrumClient {
       proxyInfo,
     );
     client.clientName = clientName;
+    client.clientVersion = clientVersion;
     client.protocolVersion = protocolVersion;
     await client.serverVersion(
-        /*
         clientName: '$clientName/$clientVersion',
-        protocolVersion: protocolVersion*/
-        );
+        protocolVersion: protocolVersion);
     return client;
   }
 
