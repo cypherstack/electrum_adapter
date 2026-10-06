@@ -1,3 +1,4 @@
+import 'package:stream_channel/stream_channel.dart';
 import 'package:test/test.dart';
 import 'package:electrum_adapter/electrum_adapter.dart';
 
@@ -25,6 +26,43 @@ void main() {
       });
       expect((await client.features())['genesis_hash'],
           '000000ecfc5e6324a079542221d00e10362bdc894d56500c414060eea8a3ad5a');
+    });
+  });
+
+  group('shared methods', () {
+    test('gets the server version', () async {
+      final client =
+          ElectrumClient(server.channel, 'localhost', 50002, true, null);
+      server.willRespondWith('server.version', ['ElectrumX 1.19.0', '1.4']);
+      expect(await client.serverVersion(), ['ElectrumX 1.19.0', '1.4']);
+    });
+
+    Future<Object?> versionRequest(
+        Future<void> Function(ElectrumClient) call) async {
+      final channel = StreamChannelController<dynamic>();
+      final client =
+          ElectrumClient(channel.local, 'localhost', 50002, true, null);
+      final request = channel.foreign.stream.first;
+      final done = call(client);
+      final sent = await request as Map<String, dynamic>;
+      channel.foreign.sink.add({
+        'jsonrpc': '2.0',
+        'id': sent['id'],
+        'result': ['ElectrumX 1.19.0', '1.4'],
+      });
+      await done;
+      return sent['params'];
+    }
+
+    test('sends no parameters by default', () async {
+      expect(await versionRequest((c) => c.serverVersion()), isNull);
+    });
+
+    test('sends the client name and protocol version', () async {
+      expect(
+          await versionRequest((c) =>
+              c.serverVersion(clientName: 'app/1.0', protocolVersion: '1.4')),
+          ['app/1.0', '1.4']);
     });
   });
 }
