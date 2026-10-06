@@ -54,5 +54,110 @@ void main() {
         ],
       );
     });
+
+    test('getMeta reads integer flags', () async {
+      var method = 'blockchain.asset.get_meta';
+      server.willRespondWith(method, {
+        'sats_in_circulation': 100,
+        'divisions': 0,
+        'reissuable': 1,
+        'has_ipfs': 0,
+        'source': {'tx_hash': '00a1b2c3', 'tx_pos': 3, 'height': 5},
+      });
+      var result = await client.getMeta('ASSET');
+      expect(
+          result,
+          AssetMeta(
+              symbol: 'ASSET',
+              satsInCirculation: 100,
+              divisions: 0,
+              reissuable: true,
+              hasIpfs: false,
+              source: TxSource(txHash: '00a1b2c3', txPos: 3, height: 5)));
+    });
+
+    test('getMeta rejects a flag that is not 0 or 1', () async {
+      server.willRespondWith('blockchain.asset.get_meta', {
+        'sats_in_circulation': 100,
+        'divisions': 0,
+        'reissuable': 'yes',
+        'has_ipfs': 0,
+        'source': {'tx_hash': '00a1b2c3', 'tx_pos': 3, 'height': 5},
+      });
+      await expectLater(
+          client.getMeta('ASSET'), throwsA(isA<FormatException>()));
+    });
+
+    test('getTransaction reads a payment and a coinbase', () async {
+      var method = 'blockchain.transaction.get';
+      server.willRespondWith(method, {
+        'txid': 'aa',
+        'hash': 'bb',
+        'version': 1,
+        'size': 2,
+        'vsize': 2,
+        'locktime': 0,
+        'hex': '00',
+        'vin': [
+          {'coinbase': '03', 'sequence': 4294967295}
+        ],
+        'vout': [
+          {
+            'value': 1.0,
+            'n': 0,
+            'valueSat': 100000000,
+            'scriptPubKey': {
+              'asm': 'OP_DUP',
+              'hex': '76',
+              'type': 'pubkeyhash',
+              'reqSigs': 1,
+              'addresses': ['RAddress'],
+            },
+          },
+        ],
+      });
+      var tx = await client.getTransaction('aa');
+      expect(tx.vin.single.coinbase, '03');
+      expect(tx.vout.single.scriptPubKey.addresses, ['RAddress']);
+      expect(tx.vout.single.scriptPubKey.assetMemo, isNull);
+    });
+
+    test('TxScriptPubKey.memo is the data after OP_RETURN', () {
+      // The daemon shows a push of four bytes or fewer as a decimal number.
+      var script = TxScriptPubKey(
+          asm: 'OP_RETURN 26952', hex: '6a024869', type: 'nulldata');
+      expect(script.memo, '4869');
+    });
+
+    test('memoFromScript', () {
+      var commitment =
+          'aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf9';
+      expect(memoFromScript('6a24$commitment'), commitment);
+      expect(memoFromScript('6a'), '');
+      expect(memoFromScript('6a00'), '');
+      expect(memoFromScript('6a4c02beef'), 'beef');
+      expect(memoFromScript('6a4d0200beef'), 'beef');
+      expect(memoFromScript('6a4e02000000beef'), 'beef');
+      var long = 'ab' * 80;
+      expect(memoFromScript('6a4c50$long'), long);
+      // OP_1NEGATE and OP_1 to OP_16 push one byte each.
+      expect(memoFromScript('6a4f'), '81');
+      expect(memoFromScript('6a51'), '01');
+      expect(memoFromScript('6a5a'), memoFromScript('6a010a'));
+      expect(memoFromScript('6a60'), '10');
+      // Not OP_RETURN, not a push, or cut short.
+      expect(memoFromScript('76a914'), isNull);
+      expect(memoFromScript(''), isNull);
+      expect(memoFromScript('6a50'), isNull);
+      expect(memoFromScript('6a04beef'), isNull);
+      expect(memoFromScript('6a4d02'), isNull);
+      expect(memoFromScript('6a0'), isNull);
+      // Not hex.
+      expect(memoFromScript('6a-1'), isNull);
+      expect(memoFromScript('6a4c-1'), isNull);
+      expect(memoFromScript('6a+1'), isNull);
+      expect(memoFromScript('6a 1'), isNull);
+      expect(memoFromScript('6azz'), isNull);
+    });
   });
 }
