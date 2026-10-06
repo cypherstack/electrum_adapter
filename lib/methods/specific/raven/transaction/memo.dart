@@ -7,6 +7,8 @@ import 'package:electrum_adapter/electrum_adapter.dart';
 
 /// https://github.com/moontreeapp/moontree/issues/5
 /// we assume one transaction can only have one OP_RETURN
+@Deprecated('Use memoFromScript: asm shows a push of four bytes or fewer as '
+    'a decimal number, and a bare OP_RETURN throws a RangeError here.')
 String parseAsmForMemo(String asm) {
   var x = asm.split(' ');
   var i = 0;
@@ -67,13 +69,10 @@ extension GetMemoMethod on RavenElectrumClient {
       [txHash, true],
     )) as Map);
     if (response.keys.contains('vout')) {
-      for (var asm in [
-        for (var vout in response['vout'] as List)
-          vout['scriptPubKey']['asm'] as String
-      ]) {
-        var ret = parseAsmForMemo(asm);
-        if (ret != '') {
-          return ret;
+      for (var vout in response['vout'] as List) {
+        var memo = memoFromScript(vout['scriptPubKey']['hex'] as String);
+        if (memo != null && memo.isNotEmpty) {
+          return memo;
         }
       }
     }

@@ -129,6 +129,20 @@ void main() {
       expect(script.memo, '4869');
     });
 
+    test('getMemo reads a short memo from the script hex', () async {
+      server.willRespondWith('blockchain.transaction.get', {
+        'vout': [
+          {
+            'scriptPubKey': {'asm': 'OP_RETURN', 'hex': '6a'}
+          },
+          {
+            'scriptPubKey': {'asm': 'OP_RETURN 26952', 'hex': '6a024869'}
+          },
+        ],
+      });
+      expect(await client.getMemo('aa'), '4869');
+    });
+
     test('memoFromScript', () {
       var commitment =
           'aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf9';
