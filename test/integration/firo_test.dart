@@ -1,3 +1,6 @@
+@Tags(['integration'])
+library;
+
 import 'package:electrum_adapter/client/base_client.dart';
 import 'package:electrum_adapter/electrum_adapter.dart';
 import 'package:electrum_adapter/methods/specific/firo.dart';

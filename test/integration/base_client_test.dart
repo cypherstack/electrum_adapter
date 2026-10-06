@@ -1,3 +1,6 @@
+@Tags(['integration'])
+library;
+
 import 'package:test/test.dart';
 import 'package:electrum_adapter/connect.dart';
 import 'package:electrum_adapter/client/base_client.dart';
