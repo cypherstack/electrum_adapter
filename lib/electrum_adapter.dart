@@ -148,6 +148,8 @@ class RavenElectrumClient extends ElectrumClient {
       : super(channel, host, port, useSSL, proxyInfo);
   String clientName = 'MTWallet';
   String clientVersion = '1.0';
+
+  /// The protocol version the server agreed to in [connect].
   String protocolVersion = '1.10';
 
   static Future<RavenElectrumClient> connect(
@@ -158,6 +160,7 @@ class RavenElectrumClient extends ElectrumClient {
     bool acceptUnverified = true,
     String clientName = 'MTWallet',
     String clientVersion = '1.0',
+    String? minProtocolVersion = '1.4',
     String protocolVersion = '1.10',
     SecurityContext? securityContext,
   }) async {
@@ -174,10 +177,12 @@ class RavenElectrumClient extends ElectrumClient {
       port: port,
     );
     client.clientName = clientName;
-    client.protocolVersion = protocolVersion;
-    await client.serverVersion(
+    client.clientVersion = clientVersion;
+    final version = await client.serverVersion(
         clientName: '$clientName/$clientVersion',
+        minProtocolVersion: minProtocolVersion,
         protocolVersion: protocolVersion);
+    client.protocolVersion = version.protocol;
     return client;
   }
 

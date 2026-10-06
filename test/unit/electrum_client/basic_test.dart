@@ -58,6 +58,41 @@ void main() {
       expect(await versionRequest((c) => c.serverVersion()), isNull);
     });
 
+    Future<Object?> ravenVersionRequest(
+        Future<void> Function(RavenElectrumClient) call) async {
+      final channel = StreamChannelController<dynamic>();
+      final client = RavenElectrumClient(channel.local);
+      final request = channel.foreign.stream.first;
+      final done = call(client);
+      final sent = await request as Map<String, dynamic>;
+      channel.foreign.sink.add({
+        'jsonrpc': '2.0',
+        'id': sent['id'],
+        'result': ['ElectrumX Ravencoin 1.9.3', '1.9'],
+      });
+      await done;
+      return sent['params'];
+    }
+
+    test('RavenElectrumClient asks for protocol 1.4 to 1.10 by default',
+        () async {
+      expect(await ravenVersionRequest((c) => c.serverVersion()), [
+        'RavenElectrumClient',
+        ['1.4', '1.10']
+      ]);
+    });
+
+    test('RavenElectrumClient can ask for one protocol version', () async {
+      expect(
+          await ravenVersionRequest(
+              (c) => c.serverVersion(minProtocolVersion: null)),
+          ['RavenElectrumClient', '1.10']);
+      expect(
+          await ravenVersionRequest(
+              (c) => c.serverVersion(protocolVersion: '1.4')),
+          ['RavenElectrumClient', '1.4']);
+    });
+
     test('sends the client name and protocol version', () async {
       expect(
           await versionRequest((c) =>
