@@ -1,3 +1,7 @@
+## 4.0.1
+
+- Require `socks_socket` ^2.0.0; proxied connections use its managed streams and TLS.
+
 ## 4.0.0
 
 - **Breaking:** `acceptUnverified` defaults to `false` in `connect()` and the connect helpers, so a direct TLS connection verifies the server's certificate. Pass `acceptUnverified: true`, or a `securityContext` that trusts the certificate, to reach a server with a self-signed or expired one.
