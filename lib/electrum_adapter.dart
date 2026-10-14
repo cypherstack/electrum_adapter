@@ -58,6 +58,7 @@ class ElectrumClient extends SubscribingClient {
     bool useSSL = true,
     ({InternetAddress host, int port})? proxyInfo,
     SecurityContext? securityContext,
+    bool Function(X509Certificate)? onBadCertificate,
   }) async {
     final client = ElectrumClient(
       await conn.connect(
@@ -69,6 +70,7 @@ class ElectrumClient extends SubscribingClient {
         useSSL: useSSL,
         proxyInfo: proxyInfo,
         securityContext: securityContext,
+        onBadCertificate: onBadCertificate,
       ),
       host,
       port,
@@ -107,6 +109,7 @@ class FiroElectrumClient extends ElectrumClient {
     bool useSSL = true,
     ({InternetAddress host, int port})? proxyInfo,
     SecurityContext? securityContext,
+    bool Function(X509Certificate)? onBadCertificate,
   }) async {
     var client = FiroElectrumClient(
       await conn.connect(
@@ -118,6 +121,7 @@ class FiroElectrumClient extends ElectrumClient {
         useSSL: useSSL,
         proxyInfo: proxyInfo,
         securityContext: securityContext,
+        onBadCertificate: onBadCertificate,
       ),
       host,
       port,
@@ -163,6 +167,7 @@ class RavenElectrumClient extends ElectrumClient {
     String? minProtocolVersion = '1.4',
     String protocolVersion = '1.10',
     SecurityContext? securityContext,
+    bool Function(X509Certificate)? onBadCertificate,
   }) async {
     var client = RavenElectrumClient(
       await conn.connect(
@@ -172,6 +177,7 @@ class RavenElectrumClient extends ElectrumClient {
         aliveTimerDuration: aliveTimerDuration,
         acceptUnverified: acceptUnverified,
         securityContext: securityContext,
+        onBadCertificate: onBadCertificate,
       ),
       host: host,
       port: port,

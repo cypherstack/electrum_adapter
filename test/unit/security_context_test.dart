@@ -6,7 +6,16 @@ import 'package:electrum_adapter/electrum_adapter.dart';
 import 'package:stream_channel/stream_channel.dart';
 import 'package:test/test.dart';
 
-const _reply = {'jsonrpc': '2.0', 'id': 0, 'result': 'ok'};
+const _pong = {'jsonrpc': '2.0', 'id': 0, 'result': 'ok'};
+
+/// Answers a request: the version pair for server.version, else 'ok'.
+Map<String, Object?> _answer(Map<String, dynamic> request) => {
+      'jsonrpc': '2.0',
+      'id': request['id'],
+      'result': request['method'] == 'server.version'
+          ? ['ElectrumX 1.16.0', '1.4']
+          : 'ok',
+    };
 
 void main() {
   // The certificate is made per run: Apple platforms cap a TLS server
@@ -67,8 +76,10 @@ void main() {
           .cast<List<int>>()
           .transform(utf8.decoder)
           .transform(const LineSplitter())
-          .listen((_) => client.write('${jsonEncode(_reply)}\n'),
-              onError: (Object _) {});
+          .listen((line) {
+        final request = jsonDecode(line) as Map<String, dynamic>;
+        client.write('${jsonEncode(_answer(request))}\n');
+      }, onError: (Object _) {});
     }, onError: (Object _) {});
   });
 
@@ -90,14 +101,16 @@ void main() {
   }
 
   group('direct', () {
-    Future<StreamChannel<dynamic>> open(SecurityContext? context) =>
+    Future<StreamChannel<dynamic>> open(SecurityContext? context,
+            {bool Function(X509Certificate)? onBadCertificate}) =>
         connect('localhost',
             port: server.port,
             acceptUnverified: false,
-            securityContext: context);
+            securityContext: context,
+            onBadCertificate: onBadCertificate);
 
     test('trusts a self-signed certificate from the context', () async {
-      expect(await roundTrip(open(trusting())), _reply);
+      expect(await roundTrip(open(trusting())), _pong);
     });
 
     test('rejects the certificate without the context', () async {
@@ -128,6 +141,80 @@ void main() {
       addTearDown(client.close);
       expect(await client.request('server.ping'), 'ok');
     });
+
+    test('offers an untrusted certificate to onBadCertificate', () async {
+      X509Certificate? offered;
+      expect(
+          await roundTrip(open(null, onBadCertificate: (certificate) {
+            offered = certificate;
+            return true;
+          })),
+          _pong);
+      expect(offered?.subject, contains('CN=localhost'));
+    });
+
+    test('rejects the certificate when onBadCertificate returns false',
+        () async {
+      await expectLater(open(null, onBadCertificate: (_) => false),
+          throwsA(isA<HandshakeException>()));
+    });
+
+    test('calls onBadCertificate even with a context', () async {
+      // The context trusts nothing, so only the callback can accept.
+      expect(
+          await roundTrip(open(SecurityContext(withTrustedRoots: false),
+              onBadCertificate: (_) => true)),
+          _pong);
+    });
+
+    test('acceptUnverified without a context does not consult the callback',
+        () async {
+      expect(
+          await roundTrip(connect('localhost',
+              port: server.port,
+              acceptUnverified: true,
+              onBadCertificate: (_) => false)),
+          _pong);
+    });
+
+    test('ElectrumClient.connect passes onBadCertificate through', () async {
+      X509Certificate? offered;
+      final client = await ElectrumClient.connect(
+          host: 'localhost',
+          port: server.port,
+          onBadCertificate: (certificate) {
+            offered = certificate;
+            return true;
+          });
+      addTearDown(client.close);
+      expect(await client.request('server.ping'), 'ok');
+      expect(offered, isNotNull);
+    });
+
+    test('FiroElectrumClient.connect passes onBadCertificate through',
+        () async {
+      X509Certificate? offered;
+      final client = await FiroElectrumClient.connect('localhost',
+          port: server.port, onBadCertificate: (certificate) {
+        offered = certificate;
+        return true;
+      });
+      addTearDown(client.close);
+      expect(offered, isNotNull);
+    });
+
+    test('RavenElectrumClient.connect passes onBadCertificate through',
+        () async {
+      X509Certificate? offered;
+      final client = await RavenElectrumClient.connect('localhost',
+          port: server.port, onBadCertificate: (certificate) {
+        offered = certificate;
+        return true;
+      });
+      addTearDown(client.close);
+      expect(offered, isNotNull);
+      expect(client.protocolVersion, '1.4');
+    });
   });
 
   group('through a SOCKS5 proxy', () {
@@ -139,18 +226,37 @@ void main() {
 
     tearDownAll(() => proxy.close());
 
-    Future<StreamChannel<dynamic>> open(SecurityContext? context) =>
+    Future<StreamChannel<dynamic>> open(SecurityContext? context,
+            {bool Function(X509Certificate)? onBadCertificate}) =>
         connect('localhost',
             port: server.port,
             proxyInfo: (host: InternetAddress.loopbackIPv4, port: proxy.port),
-            securityContext: context);
+            securityContext: context,
+            onBadCertificate: onBadCertificate);
 
     test('trusts a self-signed certificate from the context', () async {
-      expect(await roundTrip(open(trusting())), _reply);
+      expect(await roundTrip(open(trusting())), _pong);
     });
 
     test('rejects the certificate without the context', () async {
       await expectLater(open(null), throwsA(isA<HandshakeException>()));
+    });
+
+    test('offers an untrusted certificate to onBadCertificate', () async {
+      X509Certificate? offered;
+      expect(
+          await roundTrip(open(null, onBadCertificate: (certificate) {
+            offered = certificate;
+            return true;
+          })),
+          _pong);
+      expect(offered?.subject, contains('CN=localhost'));
+    });
+
+    test('rejects the certificate when onBadCertificate returns false',
+        () async {
+      await expectLater(open(null, onBadCertificate: (_) => false),
+          throwsA(isA<HandshakeException>()));
     });
   });
 }
