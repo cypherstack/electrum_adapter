@@ -21,6 +21,11 @@ const aliveTimerDuration = Duration(seconds: 2);
 /// [securityContext] is always enforced, even when [acceptUnverified] is true.
 /// On macOS and iOS the certificate must also list the serverAuth extended
 /// key usage.
+///
+/// [onBadCertificate] is called with a certificate that fails verification,
+/// on a direct TLS connection and through a proxy; return true to accept it.
+/// It is not called on a direct connection when [acceptUnverified] is true
+/// without a [securityContext], which accepts every certificate.
 Future<StreamChannel> connect(
   String host, {
   int port = 50002,
@@ -30,6 +35,7 @@ Future<StreamChannel> connect(
   bool useSSL = true,
   ({InternetAddress host, int port})? proxyInfo,
   SecurityContext? securityContext,
+  bool Function(X509Certificate)? onBadCertificate,
 }) async {
   var socket;
   if (proxyInfo == null) {
@@ -37,8 +43,9 @@ Future<StreamChannel> connect(
       socket = await io.SecureSocket.connect(host, port,
           timeout: connectionTimeout,
           context: securityContext,
-          onBadCertificate:
-              acceptUnverified && securityContext == null ? (_) => true : null);
+          onBadCertificate: acceptUnverified && securityContext == null
+              ? (_) => true
+              : onBadCertificate);
     } else {
       socket = await io.Socket.connect(host, port, timeout: connectionTimeout);
     }
@@ -59,6 +66,7 @@ Future<StreamChannel> connect(
       proxyPort: proxyInfo.port,
       sslEnabled: useSSL,
       securityContext: securityContext,
+      onBadCertificate: onBadCertificate,
     );
     await socket.connect();
 

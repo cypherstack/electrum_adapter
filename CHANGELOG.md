@@ -1,3 +1,8 @@
+## 4.1.0
+
+- Add `onBadCertificate` to `connect()` and to the `ElectrumClient`, `FiroElectrumClient` and `RavenElectrumClient` connect helpers. It is called with a certificate that fails verification, on a direct TLS connection and through a SOCKS5 proxy, and accepts it by returning true, so a caller can pin a server's certificate. `acceptUnverified: true` without a `securityContext` still accepts every certificate on a direct connection without calling it.
+- Require `socks_socket` ^2.1.0, which passes `onBadCertificate` through to the TLS upgrade after the SOCKS5 CONNECT.
+
 ## 4.0.1
 
 - Require `socks_socket` ^2.0.0; proxied connections use its managed streams and TLS.
