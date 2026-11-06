@@ -1,21 +1,24 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
+import 'package:electrum_adapter/client/base_client.dart';
 import 'package:electrum_adapter/electrum_adapter.dart';
+import 'package:electrum_adapter/src/abortable_raw_socket.dart';
 import 'package:stream_channel/stream_channel.dart';
 import 'package:test/test.dart';
 
+import 'support/json_server.dart';
+import 'support/socks.dart';
+
 const _pong = {'jsonrpc': '2.0', 'id': 0, 'result': 'ok'};
 
-/// Answers a request: the version pair for server.version, else 'ok'.
-Map<String, Object?> _answer(Map<String, dynamic> request) => {
-      'jsonrpc': '2.0',
-      'id': request['id'],
-      'result': request['method'] == 'server.version'
-          ? ['ElectrumX 1.16.0', '1.4']
-          : 'ok',
-    };
+/// The result for a request: the version pair for server.version, else 'ok'.
+Object? _answer(Map<String, dynamic> request) =>
+    request['method'] == 'review.echo'
+        ? request['params']
+        : request['method'] == 'server.version'
+            ? ['ElectrumX 1.16.0', '1.4']
+            : 'ok';
 
 void main() {
   // The certificate is made per run: Apple platforms cap a TLS server
@@ -27,9 +30,11 @@ void main() {
   }
   // Nullable so cleanup copes with a setup that failed partway.
   Directory? dir;
-  SecureServerSocket? bound;
+  JsonServer? bound;
   late String certPath;
-  late SecureServerSocket server;
+  late JsonServer server;
+
+  SecurityContext serving() => servingContext(certPath, '${dir!.path}/key.pem');
 
   setUpAll(() async {
     final tmp =
@@ -64,23 +69,8 @@ void main() {
       'extendedKeyUsage=serverAuth',
     ]);
     expect(result.exitCode, 0, reason: '${result.stderr}');
-    server = bound = await SecureServerSocket.bind(
-        InternetAddress.loopbackIPv4,
-        0,
-        SecurityContext()
-          ..useCertificateChain(certPath)
-          ..usePrivateKey(keyPath));
-    // Answer each request line with one JSON-RPC reply.
-    server.listen((client) {
-      client
-          .cast<List<int>>()
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())
-          .listen((line) {
-        final request = jsonDecode(line) as Map<String, dynamic>;
-        client.write('${jsonEncode(_answer(request))}\n');
-      }, onError: (Object _) {});
-    }, onError: (Object _) {});
+    final started = server = bound = await JsonServer.start(context: serving());
+    started.onRequest = (request) => started.reply(request, _answer(request));
   });
 
   tearDownAll(() async {
@@ -99,6 +89,87 @@ void main() {
     await channel.sink.close();
     return reply;
   }
+
+  group('closing and aborting', () {
+    // A TLS server that records each request and can stop reading.
+    late JsonServer recorder;
+    late ServerSocket proxy;
+
+    setUpAll(() async {
+      recorder = await JsonServer.start(context: serving());
+      proxy = await _tunnelProxy(recorder.port,
+          stopReading: () => recorder.stopReading);
+    });
+
+    setUp(() {
+      recorder.requests.clear();
+      recorder.stopReading = false;
+      recorder.disconnected = Completer<void>();
+    });
+
+    tearDownAll(() async {
+      await recorder.close();
+      await proxy.close();
+    });
+
+    for (final proxied in [false, true]) {
+      final path = proxied ? 'through a proxy' : 'directly';
+
+      Future<TransportChannel> open() async => await connect('localhost',
+          port: recorder.port,
+          securityContext: trusting(),
+          proxyInfo: proxied
+              ? (host: InternetAddress.loopbackIPv4, port: proxy.port)
+              : null);
+
+      test('close still sends a notification queued just before it $path',
+          () async {
+        final client = BaseClient(await open());
+        client.peer.sendNotification('server.ping', ['last']);
+        await client.close();
+        await recorder.disconnected.future.timeout(const Duration(seconds: 2));
+        expect(recorder.requests.map((request) => request['params']), [
+          ['last']
+        ]);
+      });
+    }
+  });
+
+  test('aborting TLS that holds unread input releases it', () async {
+    final server = await SecureServerSocket.bind(
+        InternetAddress.loopbackIPv4, 0, serving());
+    final accepted = <SecureSocket>[];
+    server.listen((socket) {
+      accepted.add(socket);
+      socket.listen((_) {}, onError: (Object _) {});
+      socket.done.then<void>((_) {}, onError: (Object _) {});
+      // More than the client reads, which TLS holds.
+      socket.add(List<int>.filled(256 * 1024, 0x41));
+    });
+    addTearDown(() async {
+      for (final socket in accepted) {
+        socket.destroy();
+      }
+      await server.close();
+    });
+    final tcp =
+        await RawSocket.connect(InternetAddress.loopbackIPv4, server.port);
+    final tls = AbortableRawSocket(tcp);
+    final secure = await RawSecureSocket.secure(tls,
+        host: 'localhost', context: trusting());
+    final ended = Completer<void>();
+    // Read events stay enabled, but nothing reads the plaintext.
+    secure.listen((_) {}, onError: (Object _) {
+      if (!ended.isCompleted) ended.complete();
+    }, onDone: () {
+      if (!ended.isCompleted) ended.complete();
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    tls.abort(const SocketException('aborted'));
+    tcp.close().ignore();
+    // Closing TCP alone would leave TLS waiting forever.
+    await ended.future.timeout(const Duration(seconds: 2));
+  });
 
   group('direct', () {
     Future<StreamChannel<dynamic>> open(SecurityContext? context,
@@ -270,34 +341,26 @@ bool _hasOpenssl() {
 }
 
 /// A SOCKS5 proxy that tunnels every CONNECT to [upstreamPort] on loopback.
-Future<ServerSocket> _tunnelProxy(int upstreamPort) async {
+/// Once [stopReading] returns true, it stops reading from its client, so the
+/// client's writes back up as with a stalled server.
+Future<ServerSocket> _tunnelProxy(int upstreamPort,
+    {bool Function()? stopReading}) async {
   final proxy = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
   proxy.listen((client) {
-    final buffer = <int>[];
     Socket? upstream;
-    var connecting = false;
-    client.listen((bytes) async {
-      if (upstream != null) {
-        upstream!.add(bytes);
-        return;
-      }
-      buffer.addAll(bytes);
-      if (buffer.length == 3) {
-        client.add([5, 0]);
-      } else if (!connecting &&
-          buffer.length > 8 &&
-          buffer.length >= 10 + buffer[7]) {
-        connecting = true;
-        final pending = buffer.sublist(10 + buffer[7]);
-        final socket =
-            await Socket.connect(InternetAddress.loopbackIPv4, upstreamPort);
-        socket.listen(client.add,
-            onError: (Object _) {}, onDone: client.destroy);
-        client.add([5, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
-        if (pending.isNotEmpty) socket.add(pending);
-        upstream = socket;
-      }
-    }, onError: (Object _) {}, onDone: () => upstream?.destroy());
+    late StreamSubscription<List<int>> reading;
+    reading = serveSocks(client,
+        beforeReply: () async {
+          final socket = upstream =
+              await Socket.connect(InternetAddress.loopbackIPv4, upstreamPort);
+          socket.listen(client.add,
+              onError: (Object _) {}, onDone: client.destroy);
+        },
+        onPayload: (bytes) {
+          upstream!.add(bytes);
+          if (stopReading?.call() ?? false) reading.pause();
+        },
+        onDone: () => upstream?.destroy());
   });
   return proxy;
 }

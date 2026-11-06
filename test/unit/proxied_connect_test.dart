@@ -1,35 +1,23 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:electrum_adapter/client/base_client.dart';
 import 'package:electrum_adapter/connect.dart';
 import 'package:socks_socket/socks_socket.dart';
 import 'package:test/test.dart';
 
+import 'support/socks.dart';
+import 'support/sockets.dart';
+
 void main() {
   test('a proxy reset fails the input and output and permits disposal',
       () async {
-    final proxy = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
-    addTearDown(proxy.close);
+    final proxy = SocksProxy('none');
     final accepted = Completer<Socket>();
-    proxy.listen((peer) {
-      addTearDown(peer.destroy);
-      final buffer = <int>[];
-      var tunnel = false;
-      peer.listen((bytes) {
-        if (tunnel) return;
-        buffer.addAll(bytes);
-        if (buffer.length == 3) {
-          peer.add([5, 0]);
-        } else if (buffer.length > 8 && buffer.length == 10 + buffer[7]) {
-          tunnel = true;
-          peer.add([5, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
-          accepted.complete(peer);
-        }
-      }, onError: (Object _) {});
-    });
+    proxy.onConnected = accepted.complete;
+    await proxy.start();
+    addTearDown(proxy.stop);
 
     final channel = await connect(
       'localhost',
@@ -43,9 +31,8 @@ void main() {
     final outputFailed = expectLater(
         channel.sink.done, throwsA(isA<SocksConnectionException>()));
     final peer = await accepted.future;
-    // Linux SO_LINGER {on=1, seconds=0}: reset instead of graceful EOF.
-    peer.setRawOption(RawSocketOption(
-        1, 13, Uint8List.view(Int32List.fromList([1, 0]).buffer)));
+    // Reset instead of graceful EOF.
+    peer.setRawOption(resetOption()!);
     peer.destroy();
 
     await done.future.timeout(const Duration(seconds: 5));
@@ -53,7 +40,7 @@ void main() {
     expect(errors, [isA<SocksConnectionException>()]);
     await expectLater(
         channel.sink.close(), throwsA(isA<SocksConnectionException>()));
-  }, testOn: 'linux');
+  }, testOn: 'linux || mac-os');
 
   test('a proxied request reaches a server that closed its side', () async {
     final request = {
@@ -63,75 +50,69 @@ void main() {
       'params': ['00' * (4 * 1024 * 1024)],
     };
     final expected = utf8.encode('${jsonEncode(request)}\n').length;
-    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
-    addTearDown(server.close);
-    final received = Completer<int>();
     // A SOCKS5 proxy whose tunnel peer half-closes, then reads slowly.
-    server.listen((peer) {
-      addTearDown(peer.destroy);
+    final proxy = SocksProxy('none')
       // SO_RCVBUF: keep the request queued on the sending side.
-      final soRcvbuf = Platform.isLinux || Platform.isAndroid ? 8 : 0x1002;
-      peer.setRawOption(RawSocketOption.fromInt(
-          RawSocketOption.levelSocket, soRcvbuf, 65536));
-      final buffer = <int>[];
-      var tunnel = false;
-      var count = 0;
-      late StreamSubscription<List<int>> input;
-      input = peer.listen((bytes) async {
-        if (tunnel) {
-          count += bytes.length;
-          return;
-        }
-        buffer.addAll(bytes);
-        if (buffer.length == 3) {
-          peer.add([5, 0]);
-        } else if (buffer.length > 8 && buffer.length == 10 + buffer[7]) {
-          tunnel = true;
-          input.pause();
-          peer.add([5, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
-          await peer.close();
-          await Future<void>.delayed(const Duration(milliseconds: 200));
-          input.resume();
-        }
-      }, onDone: () => received.complete(count));
-    });
+      ..onAccept = (peer) => peer.setRawOption(RawSocketOption.fromInt(
+          RawSocketOption.levelSocket,
+          Platform.isLinux || Platform.isAndroid ? 8 : 0x1002,
+          65536));
+    proxy.onConnected = (peer) async {
+      proxy.pauseReading();
+      await peer.close();
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      proxy.resumeReading();
+    };
+    await proxy.start();
+    addTearDown(proxy.stop);
 
     final channel = await connect(
       'localhost',
       port: 50001,
       useSSL: false,
-      proxyInfo: (host: InternetAddress.loopbackIPv4, port: server.port),
+      proxyInfo: (host: InternetAddress.loopbackIPv4, port: proxy.port),
     );
     // Clients keep listening for replies, so the EOF is seen mid-send.
     final replies = channel.stream.drain<void>();
     channel.sink.add(request);
     await replies;
-    expect(
-        await received.future.timeout(const Duration(seconds: 10)), expected);
+    await proxy.closed.future.timeout(const Duration(seconds: 10));
+    expect(proxy.payload.length, expected);
+  });
+
+  test('targets reach the proxy with their address type', () async {
+    // CONNECT, then the address type and address, then port 50001.
+    final targets = {
+      '127.0.0.1': [1, 127, 0, 0, 1],
+      '::1': [4, ...List.filled(15, 0), 1],
+      'localhost': [3, 9, ...'localhost'.codeUnits],
+    };
+    for (final MapEntry(key: host, value: address) in targets.entries) {
+      final proxy = SocksProxy('none');
+      await proxy.start();
+      addTearDown(proxy.stop);
+      final channel = await connect(host,
+          port: 50001,
+          useSSL: false,
+          connectionTimeout: const Duration(seconds: 2),
+          proxyInfo: (host: InternetAddress.loopbackIPv4, port: proxy.port));
+      expect(
+          proxy.connectRequests,
+          [
+            [5, 1, 0, ...address, 0xc3, 0x51]
+          ],
+          reason: host);
+      channel.abort();
+    }
+    expect(socksRequestLength([5, 1, 0, 1, 127, 0, 0, 1, 0, 80]), 10);
+    expect(socksRequestLength([5, 1, 0, 4, ...List.filled(18, 0)]), 22);
+    expect(socksRequestLength([5, 1, 0, 3, 1, 120, 0]), isNull);
   });
 
   test('closing the client closes the proxied connection', () async {
-    final proxy = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
-    addTearDown(proxy.close);
-    final closed = Completer<void>();
-    // A SOCKS5 proxy that reports when the client ends the connection.
-    proxy.listen((peer) {
-      final buffer = <int>[];
-      var tunnel = false;
-      peer.listen((bytes) {
-        if (tunnel) return;
-        buffer.addAll(bytes);
-        if (buffer.length == 3) {
-          peer.add([5, 0]);
-        } else if (buffer.length > 8 && buffer.length == 10 + buffer[7]) {
-          tunnel = true;
-          peer.add([5, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
-        }
-      }, onDone: () {
-        if (!closed.isCompleted) closed.complete();
-        peer.destroy();
-      });
-    });
+    final proxy = SocksProxy('none');
+    await proxy.start();
+    addTearDown(proxy.stop);
 
     final client = BaseClient(await connect(
       'localhost',
@@ -140,6 +121,6 @@ void main() {
       proxyInfo: (host: InternetAddress.loopbackIPv4, port: proxy.port),
     ));
     await client.close();
-    await closed.future.timeout(const Duration(seconds: 5));
+    await proxy.closed.future.timeout(const Duration(seconds: 5));
   });
 }

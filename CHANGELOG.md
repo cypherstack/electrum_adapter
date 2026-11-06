@@ -1,3 +1,12 @@
+## Unreleased
+
+- Apply `connectionTimeout` to the whole connection, direct or through a SOCKS5 proxy: TCP, SOCKS negotiation and TLS. An expired or failed attempt releases its socket, even when the server never hangs up.
+- **Behavior change:** `connectionTimeout` defaults to 5 seconds for a direct connection and to 30 seconds through a proxy (`proxyConnectionTimeout`); earlier versions allowed each SOCKS step 30 seconds. An expired attempt throws `ConnectionTimeoutException`, which is a `TimeoutException` and also, like the dart:io connect timeouts thrown before, a `SocketException`.
+- `connect()` decodes each line from the server as one JSON message while it arrives, without holding it as a string: a malformed line is skipped without affecting the next, and invalid UTF-8 is replaced. A server that closes in the middle of a message now ends the client.
+- `connect()` returns a `TransportChannel`; `withChannel` keeps its `abort`, `done` and received byte count for a wrapped channel. Closing its sink ends its stream at once, sends queued output and then shuts down sending, as closing a dart:io `Socket` does; the connection closes when the server closes its side, or at once with `abort()`. `ConnectionTimeoutException` names the host and port.
+- **Behavior change:** the adapter negotiates SOCKS5 itself, so a proxied channel's stream can be listened to once, like a direct one; proxy failures keep socks_socket's exception types. Direct plaintext connections no longer go through `IOOverrides`.
+- Document that the retained `aliveTimerDuration` parameter has no effect. Connection deadlines must be positive.
+
 ## 4.1.0
 
 - Add `onBadCertificate` to `connect()` and to the `ElectrumClient`, `FiroElectrumClient` and `RavenElectrumClient` connect helpers. It is called with a certificate that fails verification, on a direct TLS connection and through a SOCKS5 proxy, and accepts it by returning true, so a caller can pin a server's certificate. `acceptUnverified: true` without a `securityContext` still accepts every certificate on a direct connection without calling it.

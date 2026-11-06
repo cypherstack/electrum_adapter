@@ -52,7 +52,7 @@ class ElectrumClient extends SubscribingClient {
   static Future<ElectrumClient> connect({
     required String host,
     required int port,
-    Duration connectionTimeout = conn.connectionTimeout,
+    Duration? connectionTimeout,
     Duration aliveTimerDuration = conn.aliveTimerDuration,
     bool acceptUnverified = false,
     bool useSSL = true,
@@ -100,7 +100,7 @@ class FiroElectrumClient extends ElectrumClient {
   static Future<FiroElectrumClient> connect(
     String host, {
     int port = 50002,
-    Duration connectionTimeout = conn.connectionTimeout,
+    Duration? connectionTimeout,
     Duration aliveTimerDuration = conn.aliveTimerDuration,
     bool acceptUnverified = false,
     String clientName = 'electrum_adapter',
@@ -159,7 +159,7 @@ class RavenElectrumClient extends ElectrumClient {
   static Future<RavenElectrumClient> connect(
     String host, {
     int port = 50002,
-    Duration connectionTimeout = conn.connectionTimeout,
+    Duration? connectionTimeout,
     Duration aliveTimerDuration = conn.aliveTimerDuration,
     bool acceptUnverified = false,
     String clientName = 'MTWallet',
