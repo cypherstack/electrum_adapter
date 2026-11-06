@@ -35,6 +35,119 @@ void main() {
     await closed.future.timeout(const Duration(seconds: 1));
   });
 
+  for (final kind in ['firo', 'raven']) {
+    Future<ElectrumClient> open(JsonServer server,
+            {Duration? requestTimeout}) =>
+        kind == 'firo'
+            ? FiroElectrumClient.connect('127.0.0.1',
+                port: server.port,
+                useSSL: false,
+                connectionTimeout: const Duration(milliseconds: 150),
+                requestTimeout: requestTimeout ?? const Duration(seconds: 10))
+            : RavenElectrumClient.connect('127.0.0.1',
+                port: server.port,
+                useSSL: false,
+                connectionTimeout: const Duration(milliseconds: 150),
+                requestTimeout: requestTimeout ?? const Duration(seconds: 10));
+
+    test('$kind connection deadline includes server.version', () async {
+      final server = await JsonServer.start();
+      addTearDown(server.close);
+      final watch = Stopwatch()..start();
+      // The connection deadline, not the 10 s request deadline, ends it.
+      await expectLater(
+          open(server),
+          throwsA(isA<ConnectionTimeoutException>()
+              .having((e) => e.message, 'message', contains('negotiation'))));
+      expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
+      expect(server.requests.single['method'], 'server.version');
+      await server.disconnected.future.timeout(const Duration(seconds: 1));
+    });
+
+    test(
+        '$kind negotiation may use the connection budget beyond requestTimeout',
+        () async {
+      final server = await JsonServer.start();
+      addTearDown(server.close);
+      server.onRequest = (request) => Timer(const Duration(milliseconds: 300),
+          () => server.reply(request, ['ElectrumX 1.16', '1.4']));
+      final client = await (kind == 'firo'
+          ? FiroElectrumClient.connect('127.0.0.1',
+              port: server.port,
+              useSSL: false,
+              connectionTimeout: const Duration(seconds: 3),
+              requestTimeout: const Duration(milliseconds: 100))
+          : RavenElectrumClient.connect('127.0.0.1',
+              port: server.port,
+              useSSL: false,
+              connectionTimeout: const Duration(seconds: 3),
+              requestTimeout: const Duration(milliseconds: 100)));
+      addTearDown(client.close);
+      expect(client.peer.isClosed, isFalse);
+    });
+
+    test(
+        '$kind negotiation expiry is a connection timeout despite a shorter '
+        'requestTimeout', () async {
+      final server = await JsonServer.start();
+      addTearDown(server.close);
+      await expectLater(
+          open(server, requestTimeout: const Duration(milliseconds: 50)),
+          throwsA(isA<ConnectionTimeoutException>()
+              .having((e) => e.message, 'message', contains('negotiation'))));
+    });
+
+    test('$kind releases the connection on malformed server.version', () async {
+      final server = await JsonServer.start();
+      addTearDown(server.close);
+      server.onRequest = (request) => server.reply(request, 42);
+      await expectLater(open(server), throwsA(isA<Error>()));
+      await server.disconnected.future.timeout(const Duration(seconds: 1));
+    });
+
+    test('$kind negotiated client retains its configured RPC deadline',
+        () async {
+      final server = await JsonServer.start();
+      addTearDown(server.close);
+      server.onRequest = (request) {
+        if (request['method'] == 'server.version')
+          server.reply(request, ['test', '1.4']);
+      };
+      final client =
+          await open(server, requestTimeout: const Duration(milliseconds: 100));
+      addTearDown(client.close);
+      expect(client.requestTimeout, const Duration(milliseconds: 100));
+      await expectLater(
+          client.request('silent'), throwsA(isA<TimeoutException>()));
+      await server.disconnected.future.timeout(const Duration(seconds: 1));
+    });
+
+    test('$kind completed initialization cancels the setup deadline', () async {
+      final server = await JsonServer.start();
+      addTearDown(server.close);
+      server.onRequest = (request) => server.reply(request, ['test', '1.4']);
+      final client = await open(server);
+      addTearDown(client.close);
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      expect(client.peer.isClosed, isFalse);
+      expect(await client.request('still.connected'), ['test', '1.4']);
+    });
+  }
+
+  test('a silent RPC aborts the actual TCP transport', () async {
+    final server = await JsonServer.start();
+    addTearDown(server.close);
+    final client = await ElectrumClient.connect(
+        host: '127.0.0.1',
+        port: server.port,
+        useSSL: false,
+        requestTimeout: const Duration(milliseconds: 100));
+    addTearDown(client.close);
+    await expectLater(
+        client.request('silent'), throwsA(isA<TimeoutException>()));
+    await server.disconnected.future.timeout(const Duration(seconds: 1));
+  });
+
   test('a connection timeout is a TimeoutException and a SocketException',
       () async {
     final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
@@ -94,6 +207,27 @@ void main() {
     ]);
   });
 
+  test('a reply cut off by the server closing ends the client at once',
+      () async {
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    server.listen((peer) {
+      peer.listen((_) {
+        peer.write('{"jsonrpc":"2.0","id":0,"res');
+        peer.close();
+      }, onError: (Object _) {});
+    });
+    final client = await ElectrumClient.connect(
+        host: '127.0.0.1',
+        port: server.port,
+        useSSL: false,
+        requestTimeout: const Duration(seconds: 30));
+    addTearDown(client.close);
+    await expectLater(client.request('truncated'), throwsStateError)
+        .timeout(const Duration(seconds: 2));
+    await client.done.timeout(const Duration(seconds: 1));
+  });
+
   test('closing the raw channel ends cleanly despite unread replies', () async {
     final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(server.close);
@@ -142,6 +276,36 @@ void main() {
     ]);
   });
 
+  test('a request deadline releases a transport whose server stopped reading',
+      () async {
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    final received = Completer<int>();
+    late StreamSubscription<List<int>> reading;
+    server.listen((peer) {
+      addTearDown(peer.destroy);
+      var count = 0;
+      reading = peer.listen((bytes) => count += bytes.length,
+          onDone: () => received.complete(count),
+          onError: (Object _) => received.complete(count));
+      reading.pause();
+    });
+    final transport =
+        await connect('127.0.0.1', port: server.port, useSSL: false);
+    final client = BaseClient(transport,
+        requestTimeout: const Duration(milliseconds: 200));
+    addTearDown(client.close);
+    final payload = 'x' * (8 * 1024 * 1024);
+    await expectLater(
+        client.request('blockchain.transaction.broadcast', [payload]),
+        throwsA(isA<TimeoutException>()));
+    // A graceful close would wait for the blocked write forever.
+    await transport.done.timeout(const Duration(seconds: 1));
+    reading.resume();
+    expect(await received.future.timeout(const Duration(seconds: 5)),
+        lessThan(payload.length));
+  });
+
   group('over a real connection', () {
     late JsonServer server;
     late BaseClient client;
@@ -151,13 +315,33 @@ void main() {
       addTearDown(server.close);
       final transport =
           await connect('127.0.0.1', port: server.port, useSSL: false);
-      client = BaseClient(transport);
+      client = BaseClient(transport,
+          requestTimeout: const Duration(milliseconds: 200));
       addTearDown(client.close);
     });
 
     List<int> encode(Map<String, dynamic> request, Object? result) =>
         utf8.encode(jsonEncode(
             {'jsonrpc': '2.0', 'id': request['id'], 'result': result}));
+
+    test('a reply whose newline arrives later does not hold back a deadline',
+        () async {
+      server.onRequest = (request) {
+        if (request['method'] != 'answered') return;
+        final peer = server.peers.single;
+        peer.add(encode(request, 'ok'));
+        Timer(const Duration(milliseconds: 30), () => peer.add([10]));
+      };
+      final watch = Stopwatch()..start();
+      final silent = expectLater(
+          client.request('silent'), throwsA(isA<TimeoutException>()));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(await client.request('answered'), 'ok');
+      await silent;
+      // The server answers, so the silent request fails alone, on time.
+      expect(watch.elapsed, lessThan(const Duration(milliseconds: 800)));
+      expect(client.peer.isClosed, isFalse);
+    });
 
     test('a malformed message split across reads does not affect the next',
         () async {
@@ -187,6 +371,104 @@ void main() {
       };
       expect(await client.request('mixed'), 'ok');
     });
+  });
+
+  test('a wrapped channel keeps its transport byte count', () async {
+    final server = await JsonServer.start();
+    addTearDown(server.close);
+    // A long reply arrives in pieces over several deadlines of another
+    // request, which the server never answers.
+    server.onRequest = (request) {
+      if (request['method'] != 'long') return;
+      final reply = utf8.encode('${jsonEncode({
+            'jsonrpc': '2.0',
+            'id': request['id'],
+            'result': 'x' * 3000
+          })}\n');
+      var sent = 0;
+      final peer = server.peers.single;
+      final pieces = Timer.periodic(const Duration(milliseconds: 20), (timer) {
+        final end = sent + 100 < reply.length ? sent + 100 : reply.length;
+        peer.add(reply.sublist(sent, end));
+        sent = end;
+        if (sent == reply.length) timer.cancel();
+      });
+      addTearDown(pieces.cancel);
+    };
+    final transport =
+        await connect('127.0.0.1', port: server.port, useSSL: false);
+    final logged = <Object?>[];
+    final client = BaseClient(transport.withChannel(transport.transformStream(
+        StreamTransformer<dynamic, dynamic>.fromHandlers(
+            handleData: (message, sink) {
+      logged.add(message);
+      sink.add(message);
+    }))), requestTimeout: const Duration(milliseconds: 150));
+    addTearDown(client.close);
+    // The silent request is the oldest, so only bytes of the long reply,
+    // arriving during its deadline, keep the connection open.
+    final silent =
+        expectLater(client.request('silent'), throwsA(isA<TimeoutException>()));
+    final long =
+        client.requestWithTimeout('long', timeout: const Duration(seconds: 5));
+    await silent;
+    expect(client.peer.isClosed, isFalse);
+    expect(await long, 'x' * 3000);
+    expect(logged, hasLength(1));
+  });
+
+  test('a last reply without a newline reaches its caller', () async {
+    final server = await JsonServer.start();
+    addTearDown(server.close);
+    server.onRequest = (request) {
+      final peer = server.peers.single;
+      peer.add(utf8.encode(jsonEncode(
+          {'jsonrpc': '2.0', 'id': request['id'], 'result': 'last'})));
+      // The server ends the connection without ending the line.
+      peer.close().ignore();
+    };
+    final client = BaseClient(
+        await connect('127.0.0.1', port: server.port, useSSL: false));
+    addTearDown(client.close);
+    expect(await client.request('final'), 'last');
+    await client.done;
+  });
+
+  test('large plaintext requests and responses preserve every byte', () async {
+    final server = await JsonServer.start();
+    addTearDown(server.close);
+    server.onRequest = (request) => server.reply(request, request['params']);
+    final client = await ElectrumClient.connect(
+        host: '127.0.0.1',
+        port: server.port,
+        useSSL: false,
+        requestTimeout: const Duration(seconds: 5));
+    addTearDown(client.close);
+    final payload = List<String>.generate(200000, (i) => '${i % 100},').join();
+    expect(await client.request('echo', [payload]), [payload]);
+  });
+
+  test('a reply cut off inside a UTF-8 character ends the client at once',
+      () async {
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    server.listen((peer) {
+      peer.listen((_) {
+        // The first byte of a two-byte character, then the server closes.
+        peer.add(
+            [...utf8.encode('{"jsonrpc":"2.0","id":0,"result":"caf'), 0xc3]);
+        peer.close();
+      }, onError: (Object _) {});
+    });
+    final client = await ElectrumClient.connect(
+        host: '127.0.0.1',
+        port: server.port,
+        useSSL: false,
+        requestTimeout: const Duration(seconds: 30));
+    addTearDown(client.close);
+    await expectLater(client.request('truncated'), throwsStateError)
+        .timeout(const Duration(seconds: 2));
+    await client.done.timeout(const Duration(seconds: 1));
   });
 
   test('close sends all queued output even when the server writes afterwards',
@@ -260,6 +542,21 @@ void main() {
     await channel.done.timeout(const Duration(seconds: 1));
     await Future<void>.delayed(const Duration(milliseconds: 50));
     expect(errors, isEmpty);
+  });
+
+  test('invalid deadlines are rejected before opening a connection', () async {
+    final server = await JsonServer.start();
+    addTearDown(server.close);
+    for (final timeout in [Duration.zero, const Duration(seconds: -1)]) {
+      await expectLater(
+          connect('127.0.0.1', port: server.port, connectionTimeout: timeout),
+          throwsArgumentError);
+      await expectLater(
+          ElectrumClient.connect(
+              host: '127.0.0.1', port: server.port, requestTimeout: timeout),
+          throwsArgumentError);
+    }
+    expect(server.peers, isEmpty);
   });
 }
 

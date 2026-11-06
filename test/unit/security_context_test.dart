@@ -132,7 +132,51 @@ void main() {
           ['last']
         ]);
       });
+
+      test('a request deadline releases TLS that stopped reading $path',
+          () async {
+        recorder.stopReading = true;
+        final transport = await open();
+        final client = BaseClient(transport,
+            requestTimeout: const Duration(milliseconds: 200));
+        addTearDown(client.close);
+        await expectLater(
+            client.request(
+                'blockchain.transaction.broadcast', ['x' * (8 * 1024 * 1024)]),
+            throwsA(isA<TimeoutException>()));
+        // A graceful close would wait for the blocked write forever.
+        await transport.done.timeout(const Duration(seconds: 1));
+      });
     }
+  });
+
+  test('a TLS server that answers nothing closes the client at the deadline',
+      () async {
+    // A server that reads nothing after the handshake.
+    final silent = await SecureServerSocket.bind(
+        InternetAddress.loopbackIPv4, 0, serving());
+    final held = <SecureSocket>[];
+    silent.listen((socket) => held.add(socket..listen(null).pause()));
+    addTearDown(() async {
+      for (final socket in held) {
+        socket.destroy();
+      }
+      await silent.close();
+    });
+    final transport = await connect('localhost',
+        port: silent.port, securityContext: trusting());
+    final client = BaseClient(transport,
+        requestTimeout: const Duration(milliseconds: 300));
+    addTearDown(client.close);
+    final first =
+        expectLater(client.request('first'), throwsA(isA<TimeoutException>()));
+    // More than TLS buffers itself, which it encrypts into the system's
+    // buffers without the server reading any of it.
+    client.request('large', ['x' * 50000]).ignore();
+    await first;
+    // Nothing moved between the client and the server.
+    expect(client.peer.isClosed, isTrue);
+    await expectLater(client.done, throwsA(isA<TimeoutException>()));
   });
 
   test('aborting TLS that holds unread input releases it', () async {
@@ -182,6 +226,18 @@ void main() {
 
     test('trusts a self-signed certificate from the context', () async {
       expect(await roundTrip(open(trusting())), _pong);
+    });
+
+    test('large TLS requests and responses preserve every byte', () async {
+      final client = await ElectrumClient.connect(
+          host: 'localhost',
+          port: server.port,
+          securityContext: trusting(),
+          requestTimeout: const Duration(seconds: 5));
+      addTearDown(client.close);
+      final payload =
+          List<String>.generate(200000, (i) => '${i % 100},').join();
+      expect(await client.request('review.echo', [payload]), [payload]);
     });
 
     test('rejects the certificate without the context', () async {

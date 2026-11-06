@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:electrum_adapter/client/base_client.dart';
 import 'package:electrum_adapter/connect.dart';
-import 'package:electrum_adapter/electrum_adapter.dart' show ElectrumClient;
+import 'package:electrum_adapter/electrum_adapter.dart'
+    show FiroElectrumClient, ElectrumClient;
 import 'package:socks_socket/socks_socket.dart' show SocksConnectionException;
 import 'package:test/test.dart';
 
@@ -69,6 +71,50 @@ void main() {
     await proxy.closed.future.timeout(const Duration(seconds: 1));
   });
 
+  test('SOCKS setup and protocol negotiation share one total deadline',
+      () async {
+    final proxy =
+        SocksProxy('none', stepDelay: const Duration(milliseconds: 80));
+    await proxy.start();
+    addTearDown(proxy.stop);
+    Timer? replyTimer;
+    addTearDown(() => replyTimer?.cancel());
+    proxy.onPayload = (peer, _) {
+      replyTimer ??= Timer(const Duration(milliseconds: 180), () {
+        peer.write('${jsonEncode({
+              'jsonrpc': '2.0',
+              'id': 0,
+              'result': ['test', '1.4']
+            })}\n');
+      });
+    };
+    await expectLater(
+        FiroElectrumClient.connect('electrum.example.invalid',
+            port: 50001,
+            useSSL: false,
+            connectionTimeout: const Duration(milliseconds: 250),
+            proxyInfo: (host: InternetAddress.loopbackIPv4, port: proxy.port)),
+        throwsA(isA<TimeoutException>()));
+    expect(proxy.payload, isNotEmpty);
+    await proxy.closed.future.timeout(const Duration(seconds: 1));
+  });
+
+  test('an RPC deadline destroys an established SOCKS transport', () async {
+    final proxy = SocksProxy('none');
+    await proxy.start();
+    addTearDown(proxy.stop);
+    final client = await ElectrumClient.connect(
+        host: 'electrum.example.invalid',
+        port: 50001,
+        useSSL: false,
+        requestTimeout: const Duration(milliseconds: 100),
+        proxyInfo: (host: InternetAddress.loopbackIPv4, port: proxy.port));
+    addTearDown(client.close);
+    await expectLater(
+        client.request('silent'), throwsA(isA<TimeoutException>()));
+    await proxy.closed.future.timeout(const Duration(seconds: 1));
+  });
+
   test('close still sends a notification queued just before it', () async {
     final proxy = SocksProxy('none');
     await proxy.start();
@@ -89,6 +135,76 @@ void main() {
           <Object?>[],
           ['again']
         ]);
+  });
+
+  test('a reply arriving with the proxy closing raises no stray errors',
+      () async {
+    final proxy = await _replyThenClose();
+    addTearDown(proxy.stop);
+    final channel = await connect('electrum.example.invalid',
+        port: 50001,
+        useSSL: false,
+        proxyInfo: (host: InternetAddress.loopbackIPv4, port: proxy.port));
+    // Let the reply and the close both arrive before anything reads them.
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    final client = BaseClient(channel);
+    expect(await client.request('first'), 'r0');
+    // An uncaught error from the closed connection would fail this test.
+    await expectLater(client.request('second'), throwsStateError);
+    // Whether the request was written before the proxy's close was read
+    // decides whether done reports the failed write.
+    await client.done.then((_) {}, onError: (Object error) {
+      expect(error, isA<SocksConnectionException>());
+    });
+  });
+
+  test('a proxy reset fails pending requests and reports its error in done',
+      () async {
+    final linger = resetOption();
+    if (linger == null) {
+      markTestSkipped('No SO_LINGER layout for this platform');
+      return;
+    }
+    final proxy = SocksProxy('none');
+    await proxy.start();
+    addTearDown(proxy.stop);
+    proxy.onPayload = (peer, _) {
+      peer.setRawOption(linger);
+      peer.destroy();
+    };
+    final client = await ElectrumClient.connect(
+        host: 'electrum.example.invalid',
+        port: 50001,
+        useSSL: false,
+        proxyInfo: (host: InternetAddress.loopbackIPv4, port: proxy.port));
+    addTearDown(client.close);
+    // As before, a lost connection fails pending requests with a StateError.
+    await expectLater(
+        client.request('reset'),
+        throwsA(isA<StateError>().having(
+            (e) => e.message, 'message', contains('SOCKS5 connection error'))));
+    await expectLater(client.done, throwsA(isA<SocksConnectionException>()));
+  });
+
+  test('a request deadline releases a proxied transport that stopped reading',
+      () async {
+    final proxy = SocksProxy('none');
+    await proxy.start();
+    addTearDown(proxy.stop);
+    final transport = await connect('electrum.example.invalid',
+        port: 50001,
+        useSSL: false,
+        proxyInfo: (host: InternetAddress.loopbackIPv4, port: proxy.port));
+    proxy.pauseReading();
+    final client = BaseClient(transport,
+        requestTimeout: const Duration(milliseconds: 200));
+    addTearDown(client.close);
+    await expectLater(
+        client.request(
+            'blockchain.transaction.broadcast', ['x' * (8 * 1024 * 1024)]),
+        throwsA(isA<TimeoutException>()));
+    // A graceful close would wait for the blocked write forever.
+    await transport.done.timeout(const Duration(seconds: 1));
   });
 
   Future<TransportChannel> openTunnel(SocksProxy proxy,
@@ -181,4 +297,15 @@ void main() {
         throwsA(isA<SocksConnectionException>().having((e) => e.message,
             'message', contains('Connection closed before SOCKS5'))));
   });
+}
+
+/// A proxy that sends a reply right after its CONNECT reply, then closes.
+Future<SocksProxy> _replyThenClose() async {
+  final proxy = SocksProxy('none')
+    ..onConnected = (peer) {
+      peer.write('{"jsonrpc":"2.0","id":0,"result":"r0"}\n');
+      peer.destroy();
+    };
+  await proxy.start();
+  return proxy;
 }

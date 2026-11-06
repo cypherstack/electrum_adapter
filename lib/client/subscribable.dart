@@ -29,8 +29,10 @@ class Subscribable {
     return '$methodPrefix$json';
   }
 
+  /// The notification's value: for a scripthash, a status that is null until
+  /// it has history.
   dynamic notificationResult(List<dynamic> params) {
-    return params[paramsCount] ?? <dynamic>{};
+    return params[paramsCount];
   }
 
   static String getMethodPrefix(String method) {
