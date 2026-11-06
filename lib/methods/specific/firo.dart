@@ -1,19 +1,22 @@
 import 'package:electrum_adapter/electrum_adapter.dart';
 
-/// Default response deadline for Firo calls that can return a whole anonymity
-/// set or list of spent serials, which a server may take minutes to build.
+/// The shortest response deadline, on a client with a `requestTimeout`, for
+/// Firo calls that can return a whole anonymity set or list of spent serials,
+/// which a server may take minutes to build.
 ///
-/// A client whose own `requestTimeout` is longer uses that instead. Each such
-/// call also takes a `timeout` for that call alone. It expires like any other
-/// request deadline: see [FiroElectrumClient.requestWithTimeout].
+/// A client whose own `requestTimeout` is longer uses that, and a client
+/// without one sets no deadline. Each such call also takes a `timeout` for
+/// that call alone. It expires like any other request deadline: see
+/// [FiroElectrumClient.requestWithTimeout].
 const firoSetRequestTimeout = Duration(minutes: 2);
 
 extension _SetRequest on FiroElectrumClient {
   Future<dynamic> _setRequest(
       String method, List<dynamic> parameters, Duration? timeout) {
+    final clientDeadline = requestTimeout;
     final deadline = timeout ??
-        (requestTimeout > firoSetRequestTimeout
-            ? requestTimeout
+        (clientDeadline == null || clientDeadline > firoSetRequestTimeout
+            ? clientDeadline
             : firoSetRequestTimeout);
     return requestWithTimeout(method,
         parameters: parameters, timeout: deadline);

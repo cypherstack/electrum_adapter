@@ -20,18 +20,19 @@ extension SharedMethods on ElectrumClient {
     ];
     final reply = await requestWithTimeout('server.version',
         parameters: params.isEmpty ? null : params,
-        timeout: timeout ?? requestTimeout) as List<dynamic>;
+        timeout: timeout) as List<dynamic>;
     return reply.cast<String>();
   }
 
-  /// Broadcasts [rawTx] and returns its hash. [timeout] defaults to
-  /// [requestTimeout]. Data that the operating system or a proxy such as Tor
+  /// Broadcasts [rawTx] and returns its hash. [timeout] replaces the client's
+  /// [requestTimeout] for this call. Data that the operating system or a proxy
+  /// such as Tor
   /// has buffered while sending counts against it, so on a slow link give a
   /// large transaction longer.
   Future<String> broadcastTransaction(String rawTx,
           {Duration? timeout}) async =>
       await requestWithTimeout('blockchain.transaction.broadcast',
-          parameters: [rawTx], timeout: timeout ?? requestTimeout) as String;
+          parameters: [rawTx], timeout: timeout) as String;
 
   /// returns transaction hashs as hexadecimal strings in the same order as rawTxs passed in
   Future<List<String>> broadcastTransactions(List<String> rawTxs,

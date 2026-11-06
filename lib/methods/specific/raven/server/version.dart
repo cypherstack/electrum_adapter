@@ -28,7 +28,7 @@ extension ServerVersionMethod on RavenElectrumClient {
               ? protocolVersion
               : [minProtocolVersion, protocolVersion],
         ],
-        timeout: timeout ?? requestTimeout);
+        timeout: timeout);
     return ServerVersion(response[0] as String, response[1] as String);
   }
 }

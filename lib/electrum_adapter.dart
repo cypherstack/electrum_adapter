@@ -53,13 +53,13 @@ class ElectrumClient extends SubscribingClient {
   late final ({InternetAddress host, int port})? proxyInfo;
 
   /// Opens a transport within [connectionTimeout], which defaults as for
-  /// [conn.connect]. Subsequent RPCs use [requestTimeout]; this helper does not
-  /// send server.version itself.
+  /// [conn.connect]. Later RPCs use [requestTimeout], if given; this helper
+  /// does not send server.version itself.
   static Future<ElectrumClient> connect({
     required String host,
     required int port,
     Duration? connectionTimeout,
-    Duration requestTimeout = BaseClient.defaultRequestTimeout,
+    Duration? requestTimeout,
     Duration closeTimeout = BaseClient.defaultCloseTimeout,
     Duration aliveTimerDuration = conn.aliveTimerDuration,
     bool acceptUnverified = false,
@@ -102,13 +102,13 @@ class FiroElectrumClient extends ElectrumClient {
   String protocolVersion = '1.4';
 
   /// Opens the transport and negotiates server.version within one
-  /// [connectionTimeout], which defaults as for [conn.connect]. Subsequent
-  /// RPCs use [requestTimeout].
+  /// [connectionTimeout], which defaults as for [conn.connect]. Later RPCs
+  /// use [requestTimeout], if given.
   static Future<FiroElectrumClient> connect(
     String host, {
     int port = 50002,
     Duration? connectionTimeout,
-    Duration requestTimeout = BaseClient.defaultRequestTimeout,
+    Duration? requestTimeout,
     Duration closeTimeout = BaseClient.defaultCloseTimeout,
     Duration aliveTimerDuration = conn.aliveTimerDuration,
     bool acceptUnverified = false,
@@ -167,13 +167,13 @@ class RavenElectrumClient extends ElectrumClient {
   String protocolVersion = '1.10';
 
   /// Opens the transport and negotiates server.version within one
-  /// [connectionTimeout], which defaults as for [conn.connect]. Subsequent
-  /// RPCs use [requestTimeout].
+  /// [connectionTimeout], which defaults as for [conn.connect]. Later RPCs
+  /// use [requestTimeout], if given.
   static Future<RavenElectrumClient> connect(
     String host, {
     int port = 50002,
     Duration? connectionTimeout,
-    Duration requestTimeout = BaseClient.defaultRequestTimeout,
+    Duration? requestTimeout,
     Duration closeTimeout = BaseClient.defaultCloseTimeout,
     Duration aliveTimerDuration = conn.aliveTimerDuration,
     bool acceptUnverified = false,
@@ -226,7 +226,7 @@ Future<T> _connectClient<T extends ElectrumClient>(
   String host, {
   required int port,
   required Duration? connectionTimeout,
-  required Duration requestTimeout,
+  required Duration? requestTimeout,
   required Duration closeTimeout,
   required bool acceptUnverified,
   required bool useSSL,
@@ -239,7 +239,7 @@ Future<T> _connectClient<T extends ElectrumClient>(
 }) async {
   final timeout =
       resolveConnectionTimeout(connectionTimeout, proxied: proxyInfo != null);
-  checkPositive(requestTimeout, 'requestTimeout');
+  if (requestTimeout != null) checkPositive(requestTimeout, 'requestTimeout');
   checkPositive(closeTimeout, 'closeTimeout');
   final watch = Stopwatch()..start();
   final channel = await conn.connect(

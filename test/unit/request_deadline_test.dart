@@ -38,6 +38,23 @@ void main() {
     await expectLater(client.request('later'), throwsStateError);
   });
 
+  test('requests have no deadline unless one is set', () async {
+    final quiet = FakeServer();
+    final untimed = BaseClient(quiet.channel);
+    addTearDown(untimed.close);
+    expect(untimed.requestTimeout, isNull);
+    final slow = untimed.request('slow');
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    expect(untimed.peer.isClosed, isFalse);
+    quiet.reply(quiet.requests.single, 'eventually');
+    expect(await slow, 'eventually');
+    // One call can still set its own.
+    await expectLater(
+        untimed.requestWithTimeout('silent',
+            timeout: const Duration(milliseconds: 30)),
+        throwsA(isA<TimeoutException>()));
+  });
+
   test("the oldest request's deadline closes a silent connection", () async {
     final short = client.requestWithTimeout('short',
         timeout: const Duration(milliseconds: 30));

@@ -17,11 +17,11 @@ import 'package:stream_channel/stream_channel.dart';
 ///   var client = BaseClient(await connect('testnet.rvn.rocks'));
 ///
 class BaseClient {
-  static const defaultRequestTimeout = Duration(seconds: 60);
   static const defaultCloseTimeout = Duration(seconds: 5);
 
-  /// Deadline for each RPC response, including responses sent in a batch.
-  final Duration requestTimeout;
+  /// Deadline for each RPC response, including responses sent in a batch;
+  /// null, the default, sets none.
+  final Duration? requestTimeout;
 
   /// How long a graceful close may spend sending queued output before the
   /// transport is aborted.
@@ -62,11 +62,12 @@ class BaseClient {
 
   /// Throws a [StateError] if [channel]'s stream already has a listener.
   BaseClient(StreamChannel<dynamic> channel,
-      {this.requestTimeout = defaultRequestTimeout,
+      {this.requestTimeout,
       this.closeTimeout = defaultCloseTimeout,
       rpc.ErrorCallback? onUnhandledError})
       : _channel = channel {
-    checkPositive(requestTimeout, 'requestTimeout');
+    final timeout = requestTimeout;
+    if (timeout != null) checkPositive(timeout, 'requestTimeout');
     checkPositive(closeTimeout, 'closeTimeout');
     _done.future.ignore();
     // Listen at once, so a stream that already has a listener fails here. A
@@ -108,15 +109,15 @@ class BaseClient {
   }
 
   Future<dynamic> request(String method, [dynamic parameters]) =>
-      requestWithTimeout(method,
-          parameters: parameters, timeout: requestTimeout);
+      requestWithTimeout(method, parameters: parameters);
 
-  /// Sends one RPC with an explicit deadline, preserving [request]'s existing
-  /// positional API. Every request goes through this method, including those
-  /// of [request] and of helpers with a deadline of their own, so a subclass
-  /// sees all requests by overriding it.
+  /// Sends one RPC, preserving [request]'s existing positional API. [timeout]
+  /// replaces the client's [requestTimeout] for this call; with neither, the
+  /// request has no deadline. Every request goes through this method,
+  /// including those of [request] and of helpers with a deadline of their own,
+  /// so a subclass sees all requests by overriding it.
   ///
-  /// The deadline runs from when the request is sent, so it includes time
+  /// A deadline runs from when the request is sent, so it includes time
   /// spent waiting behind earlier replies. When it passes, the request fails
   /// with a [TimeoutException] and a late response is discarded. If nothing at
   /// all arrived from the server during the deadline of the oldest pending
@@ -128,19 +129,21 @@ class BaseClient {
   /// progress keeps the connection open; on other channels only whole
   /// messages count. No requests are retried.
   Future<dynamic> requestWithTimeout(String method,
-      {dynamic parameters, required Duration timeout}) {
+      {dynamic parameters, Duration? timeout}) {
     try {
-      checkPositive(timeout, 'timeout');
+      if (timeout != null) checkPositive(timeout, 'timeout');
       if (_closed || peer.isClosed) {
         throw StateError('Electrum client is closed');
       }
     } catch (error, stack) {
       return Future<dynamic>.error(error, stack);
     }
+    final deadline = timeout ?? requestTimeout;
     // json_rpc_2 takes the next id first.
-    final pending = _PendingRequest(_nextId, method, timeout, _received);
+    final pending = _PendingRequest(_nextId, method, deadline, _received);
     _pending.add(pending);
-    pending.timer = Timer(timeout, () => _expire(pending));
+    if (deadline != null)
+      pending.timer = Timer(deadline, () => _expire(pending));
     try {
       unawaited(
           peer.sendRequest(method, parameters).then<void>((dynamic value) {
@@ -293,7 +296,7 @@ class _PendingRequest {
   /// The request's JSON-RPC id.
   final int id;
   final String method;
-  final Duration timeout;
+  final Duration? timeout;
 
   /// What had arrived from the server when the request was sent.
   final int received;

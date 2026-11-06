@@ -37,9 +37,9 @@ void main() {
     expect(client.peer.isClosed, isTrue);
   });
 
-  test('whole-set calls use the longer of the client deadline and two minutes',
+  test('whole-set calls use at least two minutes on a client with a deadline',
       () async {
-    Future<List<Duration>> deadlines(Duration requestTimeout) async {
+    Future<List<Duration?>> deadlines(Duration? requestTimeout) async {
       final recording = _Recording(requestTimeout);
       addTearDown(recording.close);
       recording.getSparkAnonymitySet().ignore();
@@ -60,21 +60,23 @@ void main() {
       const Duration(minutes: 3),
       const Duration(seconds: 7)
     ]);
+    // Without a client deadline, only one given for the call applies.
+    expect(await deadlines(null), [null, null, const Duration(seconds: 7)]);
   });
 }
 
 /// Records each request's deadline, as a subclass that intercepts requests
 /// does.
 class _Recording extends FiroElectrumClient {
-  final deadlines = <Duration>[];
+  final deadlines = <Duration?>[];
 
-  _Recording(Duration requestTimeout)
+  _Recording(Duration? requestTimeout)
       : super(StreamChannelController<dynamic>().local, 'host', 1, false, null,
             requestTimeout: requestTimeout);
 
   @override
   Future<dynamic> requestWithTimeout(String method,
-      {dynamic parameters, required Duration timeout}) {
+      {dynamic parameters, Duration? timeout}) {
     deadlines.add(timeout);
     return super
         .requestWithTimeout(method, parameters: parameters, timeout: timeout);

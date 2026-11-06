@@ -32,9 +32,10 @@ a `ConnectionTimeoutException`, which is both a `TimeoutException` and a
 `ElectrumClient.connect()` only establishes the transport and does not send
 `server.version`.
 
-All client constructors and connect helpers accept a positive `requestTimeout`,
-which defaults to 60 seconds. It applies to each RPC response, including
-requests in a batch and the initial subscription response. A server answers a
+All client constructors and connect helpers accept an optional, positive
+`requestTimeout`; without one, requests have no deadline. It applies to each
+RPC response, including requests in a batch and the initial subscription
+response. A server answers a
 batch in one reply once every member is done, so batch helpers, which have no
 `timeout` of their own, need a `requestTimeout` long enough for the largest
 batch. Use a longer timeout for operations that legitimately take longer:
@@ -58,13 +59,13 @@ try {
 }
 ```
 
-The existing `request(method, [parameters])` API uses the client's default, and
-`requestWithTimeout()` overrides it for one call. Every request goes through
+The existing `request(method, [parameters])` API uses the client's
+`requestTimeout`, and `requestWithTimeout()` overrides it for one call. Every request goes through
 `requestWithTimeout()`, so a subclass that intercepts requests overrides that
 method rather than `request()`. Firo calls that can return a whole anonymity
-set or list of serials, such as `getLelantusUsedCoinSerials`, default to the
-longer of the client's deadline and two minutes, and take a `timeout` of their
-own, as do `serverVersion`, `broadcastTransaction` and `broadcastTransactions`.
+set or list of serials, such as `getLelantusUsedCoinSerials`, use at least two
+minutes on a client with a deadline, and take a `timeout` of their own, as do
+`serverVersion`, `broadcastTransaction` and `broadcastTransactions`.
 
 A deadline runs from when the request is sent, so it includes time spent
 waiting behind earlier replies on the same connection. When it passes, the
@@ -116,7 +117,8 @@ connections do not go through `IOOverrides`.
 
 `aliveTimerDuration` is retained for source compatibility but has no effect.
 These deadlines bound pending operations; they do not ping an idle connection.
-To notice a dead server between requests, call `ping()` periodically.
+To notice a dead server between requests, set a `requestTimeout` and call
+`ping()` periodically.
 
 ## Features and bugs
 
