@@ -43,7 +43,10 @@ const aliveTimerDuration = Duration(seconds: 2);
 /// compatibility; it does not implement a heartbeat.
 ///
 /// Each line from the server is one JSON message, decoded as it arrives;
-/// lines that are not JSON are skipped, and invalid UTF-8 is replaced.
+/// lines that are not JSON are skipped, and invalid UTF-8 is replaced. When
+/// [maxMessageBytes] is given, a longer line fails the stream with a
+/// [MessageTooLargeException] and closes the connection; there is no limit by
+/// default.
 ///
 /// Closing the channel's sink ends its stream at once, sends queued output and
 /// then shuts down sending; the connection closes once the server closes its
@@ -60,9 +63,14 @@ Future<TransportChannel> connect(
   ({InternetAddress host, int port})? proxyInfo,
   SecurityContext? securityContext,
   bool Function(X509Certificate)? onBadCertificate,
+  int? maxMessageBytes,
 }) async {
   final timeout =
       resolveConnectionTimeout(connectionTimeout, proxied: proxyInfo != null);
+  if (maxMessageBytes != null && maxMessageBytes < 1) {
+    throw ArgumentError.value(
+        maxMessageBytes, 'maxMessageBytes', 'Must be positive');
+  }
   ConnectionTask<RawSocket>? task;
   RawSocket? tcp;
   AbortableRawSocket? tls;
@@ -147,14 +155,29 @@ Future<TransportChannel> connect(
     abort();
     throw timedOut();
   });
-  return TransportChannel(_jsonChannel(channel), channel.abort,
+  return TransportChannel(_jsonChannel(channel, maxMessageBytes), channel.abort,
       done: channel.done, received: () => channel.received);
 }
 
+/// Reported through a channel's stream when a line from the server is longer
+/// than its `maxMessageBytes`; the connection is then closed.
+class MessageTooLargeException implements Exception {
+  /// The limit, in bytes.
+  final int limit;
+
+  const MessageTooLargeException(this.limit);
+
+  @override
+  String toString() =>
+      'MessageTooLargeException: a message from the server exceeded $limit '
+      'bytes';
+}
+
 /// Newline-delimited JSON over [channel], as the Electrum protocol sends it.
-StreamChannel<dynamic> _jsonChannel(StreamChannel<List<int>> channel) {
-  final stream =
-      Stream<dynamic>.eventTransformed(channel.stream, _JsonLineSink.new);
+StreamChannel<dynamic> _jsonChannel(
+    RawSocketChannel channel, int? maxMessageBytes) {
+  final stream = Stream<dynamic>.eventTransformed(channel.stream,
+      (messages) => _JsonLineSink(messages, maxMessageBytes, channel.abort));
   final sink = StreamSinkTransformer<dynamic, List<int>>.fromHandlers(
       handleData: (data, sink) {
     sink.add(utf8.encode('${jsonEncode(data)}\n'));
@@ -164,24 +187,44 @@ StreamChannel<dynamic> _jsonChannel(StreamChannel<List<int>> channel) {
 
 /// Decodes each line of bytes as one JSON message while it arrives, so a large
 /// message is never also held as a string. Lines that are not JSON, including
-/// blank ones, are skipped, as json_rpc_2 does.
+/// blank ones, are skipped, as json_rpc_2 does. A line longer than [_limit]
+/// fails the stream and calls [_tooLarge].
 class _JsonLineSink implements EventSink<List<int>> {
   final EventSink<dynamic> _messages;
+  final int? _limit;
+  final void Function() _tooLarge;
   ByteConversionSink? _line;
+  int _lineBytes = 0;
   bool _skipping = false;
+  bool _failed = false;
 
-  _JsonLineSink(this._messages);
+  _JsonLineSink(this._messages, this._limit, this._tooLarge);
 
   @override
   void add(List<int> bytes) {
     var start = 0;
-    while (true) {
+    while (!_failed) {
       final end = bytes.indexOf(0x0A, start);
-      _decode(bytes, start, end < 0 ? bytes.length : end);
+      final stop = end < 0 ? bytes.length : end;
+      if (!_count(stop - start)) return;
+      _decode(bytes, start, stop);
       if (end < 0) return;
       _endLine();
       start = end + 1;
     }
+  }
+
+  /// Adds [bytes] to the current line, and fails the stream if that makes it
+  /// too long.
+  bool _count(int bytes) {
+    _lineBytes += bytes;
+    final limit = _limit;
+    if (limit == null || _lineBytes <= limit) return true;
+    _failed = true;
+    _line = null;
+    _messages.addError(MessageTooLargeException(limit));
+    _tooLarge();
+    return false;
   }
 
   void _decode(List<int> bytes, int start, int end) {
@@ -201,6 +244,7 @@ class _JsonLineSink implements EventSink<List<int>> {
   void _endLine() {
     final line = _line;
     _line = null;
+    _lineBytes = 0;
     _skipping = false;
     try {
       line?.close();
@@ -215,7 +259,7 @@ class _JsonLineSink implements EventSink<List<int>> {
 
   @override
   void close() {
-    _endLine();
+    if (!_failed) _endLine();
     _messages.close();
   }
 }

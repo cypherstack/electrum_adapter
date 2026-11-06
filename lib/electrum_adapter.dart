@@ -67,6 +67,7 @@ class ElectrumClient extends SubscribingClient {
     ({InternetAddress host, int port})? proxyInfo,
     SecurityContext? securityContext,
     bool Function(X509Certificate)? onBadCertificate,
+    int? maxMessageBytes,
   }) =>
       _connectClient(
         host,
@@ -79,6 +80,7 @@ class ElectrumClient extends SubscribingClient {
         proxyInfo: proxyInfo,
         securityContext: securityContext,
         onBadCertificate: onBadCertificate,
+        maxMessageBytes: maxMessageBytes,
         create: (channel) => ElectrumClient(
             channel, host, port, useSSL, proxyInfo,
             requestTimeout: requestTimeout, closeTimeout: closeTimeout),
@@ -119,6 +121,7 @@ class FiroElectrumClient extends ElectrumClient {
     ({InternetAddress host, int port})? proxyInfo,
     SecurityContext? securityContext,
     bool Function(X509Certificate)? onBadCertificate,
+    int? maxMessageBytes,
   }) =>
       _connectClient(
         host,
@@ -131,6 +134,7 @@ class FiroElectrumClient extends ElectrumClient {
         proxyInfo: proxyInfo,
         securityContext: securityContext,
         onBadCertificate: onBadCertificate,
+        maxMessageBytes: maxMessageBytes,
         create: (channel) => FiroElectrumClient(
             channel, host, port, useSSL, proxyInfo,
             requestTimeout: requestTimeout, closeTimeout: closeTimeout),
@@ -185,6 +189,7 @@ class RavenElectrumClient extends ElectrumClient {
     ({InternetAddress host, int port})? proxyInfo,
     SecurityContext? securityContext,
     bool Function(X509Certificate)? onBadCertificate,
+    int? maxMessageBytes,
   }) =>
       _connectClient(
         host,
@@ -197,6 +202,7 @@ class RavenElectrumClient extends ElectrumClient {
         proxyInfo: proxyInfo,
         securityContext: securityContext,
         onBadCertificate: onBadCertificate,
+        maxMessageBytes: maxMessageBytes,
         create: (channel) => RavenElectrumClient(channel,
             host: host,
             port: port,
@@ -233,6 +239,7 @@ Future<T> _connectClient<T extends ElectrumClient>(
   required ({InternetAddress host, int port})? proxyInfo,
   required SecurityContext? securityContext,
   required bool Function(X509Certificate)? onBadCertificate,
+  required int? maxMessageBytes,
   required T Function(StreamChannel<dynamic>) create,
   // Negotiates within the timeout it is given.
   Future<void> Function(T client, Duration timeout)? initialize,
@@ -251,6 +258,7 @@ Future<T> _connectClient<T extends ElectrumClient>(
     proxyInfo: proxyInfo,
     securityContext: securityContext,
     onBadCertificate: onBadCertificate,
+    maxMessageBytes: maxMessageBytes,
   );
   T? client;
   try {

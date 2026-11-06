@@ -102,10 +102,12 @@ channel, pass it through the original's `withChannel`:
 `BaseClient(transport.withChannel(transport.transformStream(logger)))`. Each
 line from the server is one JSON message: lines that are not JSON are skipped,
 and invalid UTF-8 is replaced; each line is decoded as it arrives, so a large
-reply is never also held as one string. Closing a channel's sink ends its
-stream at once, sends queued output and shuts down sending; the connection
-closes once the server closes its side, or at once with `abort()`. A channel's
-stream can be listened to once.
+reply is never also held as one string. `maxMessageBytes`, on `connect()` and
+the connect helpers, limits the size of one message: a longer one fails the
+connection with a `MessageTooLargeException`. There is no limit by default.
+Closing a channel's sink ends its stream at once, sends queued output and
+shuts down sending; the connection closes once the server closes its side, or
+at once with `abort()`. A channel's stream can be listened to once.
 
 Limits: a deadline that passes while the app is suspended may close the client;
 create a new client then. Data that the operating system or a proxy such as Tor
