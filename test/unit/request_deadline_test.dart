@@ -104,6 +104,19 @@ void main() {
     expect(timers.single.isActive, isFalse);
   });
 
+  test('helpers with a deadline of their own bypass an overridden request()',
+      () async {
+    final intercepting =
+        _Intercepting(StreamChannelController<dynamic>().local);
+    addTearDown(intercepting.close);
+    intercepting.request('server.ping').ignore();
+    intercepting.serverVersion().ignore();
+    intercepting.broadcastTransaction('00').ignore();
+    expect(intercepting.viaRequest, ['server.ping']);
+    expect(intercepting.viaRequestWithTimeout,
+        ['server.ping', 'server.version', 'blockchain.transaction.broadcast']);
+  });
+
   test('per-request timeout can exceed the client default', () async {
     final pending = client.requestWithTimeout('slow',
         parameters: ['argument'], timeout: const Duration(seconds: 1));
@@ -472,6 +485,29 @@ void main() {
     await stuck.close();
     await input.close();
   });
+}
+
+/// Records which override each request goes through.
+class _Intercepting extends ElectrumClient {
+  final viaRequest = <String>[];
+  final viaRequestWithTimeout = <String>[];
+
+  _Intercepting(StreamChannel<dynamic> channel)
+      : super(channel, 'host', 1, false, null);
+
+  @override
+  Future<dynamic> request(String method, [dynamic parameters]) {
+    viaRequest.add(method);
+    return super.request(method, parameters);
+  }
+
+  @override
+  Future<dynamic> requestWithTimeout(String method,
+      {dynamic parameters, Duration? timeout}) {
+    viaRequestWithTimeout.add(method);
+    return super
+        .requestWithTimeout(method, parameters: parameters, timeout: timeout);
+  }
 }
 
 /// A sink that rejects close, as a socket's sink does while a stream is
