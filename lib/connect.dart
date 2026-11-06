@@ -130,7 +130,8 @@ Future<TransportChannel> connect(
       }
       if (expired) throw timedOut();
       // As socks_socket did, a proxied connection closes once the server ends
-      // its side; a direct one stays half-open, as a dart:io Socket does.
+      // its side and the output accepted before then is sent; a direct one
+      // stays half-open, as a dart:io Socket does.
       return RawSocketChannel(socket, abort,
           events: events,
           closeOnPeerEof: proxyInfo != null,

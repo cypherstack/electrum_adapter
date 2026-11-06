@@ -42,14 +42,16 @@ void main() {
         channel.sink.close(), throwsA(isA<SocksConnectionException>()));
   }, testOn: 'linux || mac-os');
 
-  test('a proxied request reaches a server that closed its side', () async {
+  test('proxied requests reach a server that closed its side', () async {
     final request = {
       'jsonrpc': '2.0',
       'method': 'blockchain.transaction.broadcast',
       'id': 0,
       'params': ['00' * (4 * 1024 * 1024)],
     };
-    final expected = utf8.encode('${jsonEncode(request)}\n').length;
+    final marker = {'jsonrpc': '2.0', 'method': 'server.ping', 'id': 1};
+    final expected = utf8.encode('${jsonEncode(request)}\n').length +
+        utf8.encode('${jsonEncode(marker)}\n').length;
     // A SOCKS5 proxy whose tunnel peer half-closes, then reads slowly.
     final proxy = SocksProxy('none')
       // SO_RCVBUF: keep the request queued on the sending side.
@@ -75,6 +77,8 @@ void main() {
     // Clients keep listening for replies, so the EOF is seen mid-send.
     final replies = channel.stream.drain<void>();
     channel.sink.add(request);
+    // Queued behind the large request when the server closes its side.
+    channel.sink.add(marker);
     await replies;
     await proxy.closed.future.timeout(const Duration(seconds: 10));
     expect(proxy.payload.length, expected);

@@ -137,6 +137,25 @@ void main() {
     await channel.done.timeout(const Duration(seconds: 1));
   });
 
+  test('peer EOF still sends every message accepted before it', () async {
+    final socket = _Socket()..blocked = true;
+    final channel = open(socket, closeOnPeerEof: true);
+    final input = channel.stream.drain<void>();
+    channel.sink.add([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    await socket.attempted.future;
+    // Queued behind the blocked write.
+    channel.sink.add([11]);
+    channel.sink.add([12]);
+    socket.peerClose();
+    await input;
+    channel.sink.add([13]);
+    socket.unblock();
+    await channel.sink.done.timeout(const Duration(seconds: 1));
+    expect(socket.written, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(socket.sendShutdown, isTrue);
+    await channel.done.timeout(const Duration(seconds: 1));
+  });
+
   test(
       'cancelling the input of a channel that closes on peer EOF keeps its '
       'output open', () async {
@@ -209,8 +228,8 @@ void main() {
   });
 
   test(
-      'peer EOF while a stream is being added ends it and closes after '
-      'queued output', () async {
+      'peer EOF while a stream is being added sends the rest of it, then '
+      'closes', () async {
     final socket = _Socket()..blocked = true;
     final channel = open(socket, closeOnPeerEof: true);
     final input = channel.stream.drain<void>();
@@ -221,12 +240,15 @@ void main() {
     // An uncaught error from the event handler would fail this test.
     socket.peerClose();
     await input;
-    await adding.timeout(const Duration(seconds: 1));
-    // The stream being added is no longer read.
-    expect(source.hasListener, isFalse);
+    // The stream was accepted before the peer closed, so all of it is sent.
+    source.add([10]);
+    source.close().ignore();
+    expect(socket.sendShutdown, isFalse);
     socket.unblock();
+    await adding.timeout(const Duration(seconds: 1));
+    channel.sink.add([11]);
     await channel.sink.done.timeout(const Duration(seconds: 1));
-    expect(socket.written, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(socket.written, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     expect(socket.sendShutdown, isTrue);
     await channel.done.timeout(const Duration(seconds: 1));
     await channel.sink.close().timeout(const Duration(seconds: 1));

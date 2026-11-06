@@ -72,6 +72,9 @@ class RawSocketChannel extends StreamChannelMixin<List<int>> {
   late final StreamSubscription<List<int>> _writes;
   late final _ChannelSink _sink;
   final _queue = Queue<List<int>>();
+
+  /// Marks where in the output the other side closed.
+  final List<int> _peerEnd = <int>[];
   final _sent = Completer<void>();
   final _released = Completer<void>();
   int _offset = 0;
@@ -86,8 +89,9 @@ class RawSocketChannel extends StreamChannelMixin<List<int>> {
 
   /// Listens to [events] instead when the socket already has a listener, as
   /// after a SOCKS handshake. [mapError] translates transport errors. With
-  /// [closeOnPeerEof], the other side's close also closes this side once
-  /// queued output is sent; later output is dropped.
+  /// [closeOnPeerEof], the other side's close also closes this side once the
+  /// output accepted before it, including a stream being added, is sent;
+  /// later output is dropped.
   RawSocketChannel(this._socket, this._abortSocket,
       {Stream<RawSocketEvent>? events,
       Object Function(Object error)? mapError,
@@ -161,10 +165,7 @@ class RawSocketChannel extends StreamChannelMixin<List<int>> {
       if (_writeClosed) {
         _socket.close().ignore();
       } else if (_closeOnPeerEof) {
-        // A stream being added is no longer read, and later output is
-        // dropped; what is queued is still sent.
-        _writes.cancel().ignore();
-        _endOutput();
+        _sink._endAfterAccepted();
       }
     } else if (event == RawSocketEvent.closed) {
       _onDone();
@@ -201,7 +202,9 @@ class RawSocketChannel extends StreamChannelMixin<List<int>> {
   }
 
   void _write(List<int> bytes) {
-    if (_closed || bytes.isEmpty) return;
+    if (identical(bytes, _peerEnd)) return _endOutput();
+    // Output after the other side's close is dropped.
+    if (_closed || _outputEnded || bytes.isEmpty) return;
     _queue.add(bytes);
     if (!_awaitingWrite) _pump();
   }
@@ -257,7 +260,9 @@ class RawSocketChannel extends StreamChannelMixin<List<int>> {
     _events.cancel().ignore();
     _writes.cancel().ignore();
     _queue.clear();
-    if (_error == null && (_output.isClosed || _outputEnded) && !_writeClosed) {
+    if (_error == null &&
+        (_output.isClosed || _outputEnded || _sink._ending) &&
+        !_writeClosed) {
       // A close in progress was cut short, and its output was lost.
       _error = _mapped(const SocketException('Connection closed'));
       _errorStack = StackTrace.current;
@@ -282,6 +287,10 @@ class RawSocketChannel extends StreamChannelMixin<List<int>> {
 class _ChannelSink implements StreamSink<List<int>> {
   final RawSocketChannel _channel;
 
+  /// The other side closed, and this side closes once the output accepted
+  /// before then is sent.
+  bool _ending = false;
+
   _ChannelSink(this._channel);
 
   StreamController<List<int>> get _output => _channel._output;
@@ -295,7 +304,9 @@ class _ChannelSink implements StreamSink<List<int>> {
 
   @override
   Future<void> addStream(Stream<List<int>> stream) =>
-      _output.addStream(stream).then((_) {
+      _output.addStream(stream).whenComplete(() {
+        if (_ending) _markEnd();
+      }).then((_) {
         // As a socket's sink does, report a transport failure.
         final error = _channel._error;
         if (error != null) {
@@ -303,6 +314,23 @@ class _ChannelSink implements StreamSink<List<int>> {
               error, _channel._errorStack ?? StackTrace.current);
         }
       });
+
+  /// Sends the output accepted so far, including a stream being added, then
+  /// closes; output added later is dropped.
+  void _endAfterAccepted() {
+    _ending = true;
+    _markEnd();
+  }
+
+  void _markEnd() {
+    // A closed sink already ends its output after what it accepted.
+    if (_output.isClosed) return;
+    try {
+      _output.add(_channel._peerEnd);
+    } on StateError {
+      // A stream is being added; the end is marked when it is done.
+    }
+  }
 
   @override
   Future<void> close() {
