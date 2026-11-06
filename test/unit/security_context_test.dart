@@ -23,9 +23,10 @@ Object? _answer(Map<String, dynamic> request) =>
 void main() {
   // The certificate is made per run: Apple platforms cap a TLS server
   // certificate's validity, so a committed one would expire.
-  if (!_hasOpenssl()) {
+  final openssl = _findOpenssl();
+  if (openssl == null) {
     test('TLS with a self-signed certificate', () {},
-        skip: 'needs openssl on PATH');
+        skip: 'needs openssl on PATH or from Git for Windows');
     return;
   }
   // Nullable so cleanup copes with a setup that failed partway.
@@ -43,7 +44,7 @@ void main() {
     final keyPath = '${tmp.path}/key.pem';
     // A self-signed certificate, as on a personal Electrum server. Apple
     // platforms reject a server certificate without the serverAuth usage.
-    final result = await Process.run('openssl', [
+    final result = await Process.run(openssl, [
       'req',
       '-x509',
       '-newkey',
@@ -388,12 +389,26 @@ void main() {
   });
 }
 
-bool _hasOpenssl() {
-  try {
-    return Process.runSync('openssl', ['version']).exitCode == 0;
-  } on ProcessException {
-    return false;
+/// An openssl executable: on PATH, or else where Git for Windows installs one.
+String? _findOpenssl() {
+  final git = '${Platform.environment['ProgramFiles'] ?? r'C:\Program Files'}'
+      r'\Git';
+  for (final candidate in [
+    'openssl',
+    if (Platform.isWindows) ...[
+      '$git\\mingw64\\bin\\openssl.exe',
+      '$git\\usr\\bin\\openssl.exe',
+    ],
+  ]) {
+    try {
+      if (Process.runSync(candidate, ['version']).exitCode == 0) {
+        return candidate;
+      }
+    } on ProcessException {
+      // Not there.
+    }
   }
+  return null;
 }
 
 /// A SOCKS5 proxy that tunnels every CONNECT to [upstreamPort] on loopback.

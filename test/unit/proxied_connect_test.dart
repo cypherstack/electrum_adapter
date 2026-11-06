@@ -13,6 +13,11 @@ import 'support/sockets.dart';
 void main() {
   test('a proxy reset fails the input and output and permits disposal',
       () async {
+    final linger = resetOption();
+    if (linger == null) {
+      markTestSkipped('Cannot force a reset on this platform');
+      return;
+    }
     final proxy = SocksProxy('none');
     final accepted = Completer<Socket>();
     proxy.onConnected = accepted.complete;
@@ -32,7 +37,7 @@ void main() {
         channel.sink.done, throwsA(isA<SocksConnectionException>()));
     final peer = await accepted.future;
     // Reset instead of graceful EOF.
-    peer.setRawOption(resetOption()!);
+    peer.setRawOption(linger);
     peer.destroy();
 
     await done.future.timeout(const Duration(seconds: 5));
@@ -40,7 +45,7 @@ void main() {
     expect(errors, [isA<SocksConnectionException>()]);
     await expectLater(
         channel.sink.close(), throwsA(isA<SocksConnectionException>()));
-  }, testOn: 'linux || mac-os');
+  });
 
   test('proxied requests reach a server that closed its side', () async {
     final request = {

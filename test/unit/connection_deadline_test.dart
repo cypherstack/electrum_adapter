@@ -162,7 +162,7 @@ void main() {
       () async {
     final linger = resetOption();
     if (linger == null) {
-      markTestSkipped('No SO_LINGER layout for this platform');
+      markTestSkipped('Cannot force a reset on this platform');
       return;
     }
     final proxy = SocksProxy('none');
@@ -256,7 +256,7 @@ void main() {
       () async {
     final linger = resetOption();
     if (linger == null) {
-      markTestSkipped('No SO_LINGER layout for this platform');
+      markTestSkipped('Cannot force a reset on this platform');
       return;
     }
     final proxy = SocksProxy('none');
@@ -281,7 +281,7 @@ void main() {
       () async {
     final linger = resetOption();
     if (linger == null) {
-      markTestSkipped('No SO_LINGER layout for this platform');
+      markTestSkipped('Cannot force a reset on this platform');
       return;
     }
     final proxy = SocksProxy('none');
@@ -304,7 +304,8 @@ Future<SocksProxy> _replyThenClose() async {
   final proxy = SocksProxy('none')
     ..onConnected = (peer) {
       peer.write('{"jsonrpc":"2.0","id":0,"result":"r0"}\n');
-      peer.destroy();
+      // Destroying the socket at once would cancel the write on Windows.
+      peer.flush().whenComplete(peer.destroy).ignore();
     };
   await proxy.start();
   return proxy;

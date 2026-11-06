@@ -61,9 +61,8 @@ class RawSocketChannel extends StreamChannelMixin<List<int>> {
   final Object Function(Object error)? _mapError;
   final bool _closeOnPeerEof;
 
-  /// On Windows a plain socket's write can still be pending after it took
-  /// every byte; as dart:io's socket sink does, wait for the write event
-  /// before writing more or shutting down.
+  /// Whether to wait for the write event after every write before writing
+  /// more or shutting down.
   final bool _confirmWrites;
 
   late final StreamController<List<int>> _input;
@@ -92,13 +91,19 @@ class RawSocketChannel extends StreamChannelMixin<List<int>> {
   /// [closeOnPeerEof], the other side's close also closes this side once the
   /// output accepted before it, including a stream being added, is sent;
   /// later output is dropped.
+  ///
+  /// [confirmWrites] waits for the write event after every write. It defaults
+  /// to true for a plain socket on Windows, whose write can still be pending
+  /// after it took every byte, as dart:io's socket sink does.
   RawSocketChannel(this._socket, this._abortSocket,
       {Stream<RawSocketEvent>? events,
       Object Function(Object error)? mapError,
-      bool closeOnPeerEof = false})
+      bool closeOnPeerEof = false,
+      bool? confirmWrites})
       : _mapError = mapError,
         _closeOnPeerEof = closeOnPeerEof,
-        _confirmWrites = Platform.isWindows && _socket is! RawSecureSocket {
+        _confirmWrites = confirmWrites ??
+            (Platform.isWindows && _socket is! RawSecureSocket) {
     _socket.readEventsEnabled = false;
     _socket.writeEventsEnabled = false;
     _sent.future.ignore();

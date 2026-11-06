@@ -609,7 +609,7 @@ void main() {
   test('a reset after the sink closes raises no uncaught error', () async {
     final linger = resetOption();
     if (linger == null) {
-      markTestSkipped('No SO_LINGER layout for this platform');
+      markTestSkipped('Cannot force a reset on this platform');
       return;
     }
     final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);

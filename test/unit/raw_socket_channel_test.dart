@@ -8,10 +8,14 @@ import 'package:test/test.dart';
 void main() {
   RawSocketChannel open(_Socket socket,
           {bool closeOnPeerEof = false,
+          bool? confirmWrites,
           Object Function(Object error)? mapError}) =>
       RawSocketChannel(socket, () {
         socket.close();
-      }, closeOnPeerEof: closeOnPeerEof, mapError: mapError);
+      },
+          closeOnPeerEof: closeOnPeerEof,
+          confirmWrites: confirmWrites,
+          mapError: mapError);
 
   test('a rejected addStream leaves the sink usable', () async {
     final socket = _Socket();
@@ -416,10 +420,9 @@ void main() {
   });
 
   test('a write the socket takes whole does not wait for a write event',
-      // Windows confirms every write on a plain socket, as dart:io does.
-      testOn: '!windows', () async {
+      () async {
     final socket = _Socket();
-    final channel = open(socket);
+    final channel = open(socket, confirmWrites: false);
     channel.sink.add([1, 2, 3]);
     channel.sink.add([4, 5, 6]);
     expect(socket.written, [1, 2, 3, 4, 5, 6]);
@@ -429,6 +432,25 @@ void main() {
     expect(socket.writeWaits, 1);
     await channel.sink.close().timeout(const Duration(seconds: 1));
     expect(socket.written.length, 16);
+  });
+
+  test('with write confirmation, each write waits for its write event',
+      () async {
+    final socket = _Socket()..holdWriteEvents = true;
+    final channel = open(socket, confirmWrites: true);
+    channel.sink.add([1, 2, 3]);
+    channel.sink.add([4, 5]);
+    final closed = channel.sink.close();
+    await Future<void>.delayed(Duration.zero);
+    // As on Windows, a write the socket took whole may still be in flight.
+    expect(socket.written, [1, 2, 3]);
+    socket.releaseWriteEvent();
+    await Future<void>.delayed(Duration.zero);
+    expect(socket.written, [1, 2, 3, 4, 5]);
+    expect(socket.sendShutdown, isFalse);
+    socket.releaseWriteEvent();
+    await closed.timeout(const Duration(seconds: 1));
+    expect(socket.sendShutdown, isTrue);
   });
 
   test('received counts the bytes read', () async {
@@ -457,6 +479,9 @@ class _Socket extends Stream<RawSocketEvent> implements RawSocket {
   final attempted = Completer<void>();
   final unread = <int>[];
   bool blocked = false;
+
+  /// Withholds write events until [releaseWriteEvent].
+  bool holdWriteEvents = false;
   bool closed = false;
   bool sendShutdown = false;
   bool receiveShutdown = false;
@@ -490,10 +515,12 @@ class _Socket extends Stream<RawSocketEvent> implements RawSocket {
 
   void unblock() {
     blocked = false;
-    scheduleMicrotask(() {
-      if (!closed) _events.add(RawSocketEvent.write);
-    });
+    releaseWriteEvent();
   }
+
+  void releaseWriteEvent() => scheduleMicrotask(() {
+        if (!closed) _events.add(RawSocketEvent.write);
+      });
 
   void _issue() {
     if (_issued) return;
@@ -534,7 +561,7 @@ class _Socket extends Stream<RawSocketEvent> implements RawSocket {
   @override
   set writeEventsEnabled(bool value) {
     if (value) writeWaits++;
-    if (value && !blocked && !closed) {
+    if (value && !blocked && !holdWriteEvents && !closed) {
       scheduleMicrotask(() {
         if (!closed) _events.add(RawSocketEvent.write);
       });
