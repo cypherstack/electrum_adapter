@@ -276,6 +276,93 @@ void main() {
     ]);
   });
 
+  test('closing the sink drops messages a paused listener has not received',
+      () async {
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    server.listen((peer) {
+      addTearDown(peer.destroy);
+      peer.add(utf8.encode('{"n":1}\n{"n":2}\n{"n":3}\n'));
+    });
+    final channel =
+        await connect('127.0.0.1', port: server.port, useSSL: false);
+    addTearDown(channel.abort);
+    final received = <Object?>[];
+    final first = Completer<void>();
+    final ended = Completer<void>();
+    late StreamSubscription<dynamic> subscription;
+    subscription = channel.stream.listen((message) {
+      received.add(message);
+      // The rest of the read is decoded meanwhile, and waits.
+      subscription.pause();
+      first.complete();
+    }, onDone: ended.complete);
+    await first.future.timeout(const Duration(seconds: 1));
+    await channel.sink.close();
+    subscription.resume();
+    await ended.future.timeout(const Duration(seconds: 1));
+    expect(received, [
+      {'n': 1}
+    ]);
+  });
+
+  test('closing the sink after a resume stops at the message it closed in',
+      () async {
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    server.listen((peer) {
+      addTearDown(peer.destroy);
+      peer.add(utf8.encode('{"n":1}\n{"n":2}\n{"n":3}\n'));
+    });
+    final channel =
+        await connect('127.0.0.1', port: server.port, useSSL: false);
+    addTearDown(channel.abort);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    final received = <Object?>[];
+    final first = Completer<void>();
+    final ended = Completer<void>();
+    late StreamSubscription<dynamic> subscription;
+    subscription = channel.stream.listen((message) {
+      received.add(message);
+      if (received.length == 1) {
+        subscription.pause();
+        first.complete();
+      } else {
+        channel.sink.close().ignore();
+      }
+    }, onDone: ended.complete);
+    await first.future.timeout(const Duration(seconds: 1));
+    subscription.resume();
+    await ended.future.timeout(const Duration(seconds: 1));
+    expect(received, [
+      {'n': 1},
+      {'n': 2}
+    ]);
+  });
+
+  test('a close rejected while a stream is being added leaves the stream open',
+      () async {
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    final accepted = Completer<Socket>();
+    server.listen((peer) {
+      addTearDown(peer.destroy);
+      peer.listen(null, onError: (Object _) {});
+      accepted.complete(peer);
+    });
+    final channel =
+        await connect('127.0.0.1', port: server.port, useSSL: false);
+    addTearDown(channel.abort);
+    final source = StreamController<dynamic>();
+    final adding = channel.sink.addStream(source.stream);
+    expect(channel.sink.close, throwsStateError);
+    final first = channel.stream.first;
+    (await accepted.future).add(utf8.encode('{"n":1}\n'));
+    expect(await first.timeout(const Duration(seconds: 1)), {'n': 1});
+    await source.close();
+    await adding;
+  });
+
   test('a request deadline releases a transport whose server stopped reading',
       () async {
     final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
