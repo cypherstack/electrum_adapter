@@ -91,6 +91,41 @@ void main() {
     return reply;
   }
 
+  for (final tcpTimeout in [null, const Duration(milliseconds: 200)]) {
+    final label = tcpTimeout == null ? 'default' : 'explicit';
+    test('slow direct TLS can outlive the $label TCP timeout', () async {
+      final listener = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(listener.close);
+      final ready = Completer<Socket>();
+      listener.listen((peer) {
+        addTearDown(peer.destroy);
+        ready.complete(peer);
+      });
+      final connecting = ElectrumClient.connect(
+          host: 'localhost',
+          port: listener.port,
+          connectionTimeout: tcpTimeout,
+          securityContext: trusting());
+      // Observe errors immediately, including a regression that times out
+      // while the server is still waiting to start its TLS handshake.
+      connecting.ignore();
+      final peer = await ready.future.timeout(const Duration(seconds: 2));
+      await Future<void>.delayed(tcpTimeout == null
+          ? const Duration(seconds: 6)
+          : const Duration(milliseconds: 500));
+      final securing = SecureSocket.secureServer(peer, serving());
+      securing.ignore();
+      final client = await connecting;
+      addTearDown(client.close);
+      final secure = await securing;
+      addTearDown(secure.destroy);
+      secure.listen(
+          (_) => secure.write('{"jsonrpc":"2.0","id":0,"result":"ok"}\n'),
+          onError: (Object _) {});
+      expect(await client.request('server.ping'), 'ok');
+    });
+  }
+
   group('closing and aborting', () {
     // A TLS server that records each request and can stop reading.
     late JsonServer recorder;

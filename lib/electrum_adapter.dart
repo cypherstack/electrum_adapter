@@ -52,13 +52,17 @@ class ElectrumClient extends SubscribingClient {
   late final bool useSSL;
   late final ({InternetAddress host, int port})? proxyInfo;
 
-  /// Opens a transport within [connectionTimeout], which defaults as for
-  /// [conn.connect]. Later RPCs use [requestTimeout], if given; this helper
-  /// does not send server.version itself.
+  /// Opens a transport with the phase timeouts of [conn.connect]:
+  /// [connectionTimeout] for direct TCP and [proxyHandshakeTimeout] for each
+  /// proxy phase. [connectionDeadline] optionally bounds the whole setup;
+  /// there is no overall deadline by default. RPCs use [requestTimeout], if
+  /// given; this helper does not send server.version itself.
   static Future<ElectrumClient> connect({
     required String host,
     required int port,
     Duration? connectionTimeout,
+    Duration? connectionDeadline,
+    Duration? proxyHandshakeTimeout,
     Duration? requestTimeout,
     Duration closeTimeout = BaseClient.defaultCloseTimeout,
     Duration aliveTimerDuration = conn.aliveTimerDuration,
@@ -73,6 +77,8 @@ class ElectrumClient extends SubscribingClient {
         host,
         port: port,
         connectionTimeout: connectionTimeout,
+        connectionDeadline: connectionDeadline,
+        proxyHandshakeTimeout: proxyHandshakeTimeout,
         requestTimeout: requestTimeout,
         closeTimeout: closeTimeout,
         acceptUnverified: acceptUnverified,
@@ -103,13 +109,17 @@ class FiroElectrumClient extends ElectrumClient {
   // Firo servers speak protocol 1.4 to 1.6 and reject 1.10.
   String protocolVersion = '1.4';
 
-  /// Opens the transport and negotiates server.version within one
-  /// [connectionTimeout], which defaults as for [conn.connect]. Later RPCs
-  /// use [requestTimeout], if given.
+  /// Opens the transport with [connectionTimeout] and [proxyHandshakeTimeout]
+  /// as in [conn.connect], then negotiates server.version. An optional
+  /// [connectionDeadline] bounds both together and overrides [requestTimeout]
+  /// for negotiation. Without it, negotiation uses [requestTimeout], if given.
+  /// Later RPCs use [requestTimeout]. There is no overall deadline by default.
   static Future<FiroElectrumClient> connect(
     String host, {
     int port = 50002,
     Duration? connectionTimeout,
+    Duration? connectionDeadline,
+    Duration? proxyHandshakeTimeout,
     Duration? requestTimeout,
     Duration closeTimeout = BaseClient.defaultCloseTimeout,
     Duration aliveTimerDuration = conn.aliveTimerDuration,
@@ -127,6 +137,8 @@ class FiroElectrumClient extends ElectrumClient {
         host,
         port: port,
         connectionTimeout: connectionTimeout,
+        connectionDeadline: connectionDeadline,
+        proxyHandshakeTimeout: proxyHandshakeTimeout,
         requestTimeout: requestTimeout,
         closeTimeout: closeTimeout,
         acceptUnverified: acceptUnverified,
@@ -170,13 +182,17 @@ class RavenElectrumClient extends ElectrumClient {
   /// The protocol version the server agreed to in [connect].
   String protocolVersion = '1.10';
 
-  /// Opens the transport and negotiates server.version within one
-  /// [connectionTimeout], which defaults as for [conn.connect]. Later RPCs
-  /// use [requestTimeout], if given.
+  /// Opens the transport with [connectionTimeout] and [proxyHandshakeTimeout]
+  /// as in [conn.connect], then negotiates server.version. An optional
+  /// [connectionDeadline] bounds both together and overrides [requestTimeout]
+  /// for negotiation. Without it, negotiation uses [requestTimeout], if given.
+  /// Later RPCs use [requestTimeout]. There is no overall deadline by default.
   static Future<RavenElectrumClient> connect(
     String host, {
     int port = 50002,
     Duration? connectionTimeout,
+    Duration? connectionDeadline,
+    Duration? proxyHandshakeTimeout,
     Duration? requestTimeout,
     Duration closeTimeout = BaseClient.defaultCloseTimeout,
     Duration aliveTimerDuration = conn.aliveTimerDuration,
@@ -195,6 +211,8 @@ class RavenElectrumClient extends ElectrumClient {
         host,
         port: port,
         connectionTimeout: connectionTimeout,
+        connectionDeadline: connectionDeadline,
+        proxyHandshakeTimeout: proxyHandshakeTimeout,
         requestTimeout: requestTimeout,
         closeTimeout: closeTimeout,
         acceptUnverified: acceptUnverified,
@@ -226,12 +244,15 @@ class RavenElectrumClient extends ElectrumClient {
   String toString() => 'RavenElectrumClient connected to $host:$port';
 }
 
-// Socket establishment and protocol negotiation share one deadline. Failure
-// before returning a client must release the channel, including parse errors.
+// Socket establishment and protocol negotiation share a deadline only when
+// requested. Failure before returning a client must release the channel,
+// including parse errors.
 Future<T> _connectClient<T extends ElectrumClient>(
   String host, {
   required int port,
   required Duration? connectionTimeout,
+  required Duration? connectionDeadline,
+  required Duration? proxyHandshakeTimeout,
   required Duration? requestTimeout,
   required Duration closeTimeout,
   required bool acceptUnverified,
@@ -241,18 +262,18 @@ Future<T> _connectClient<T extends ElectrumClient>(
   required bool Function(X509Certificate)? onBadCertificate,
   required int? maxMessageBytes,
   required T Function(StreamChannel<dynamic>) create,
-  // Negotiates within the timeout it is given.
-  Future<void> Function(T client, Duration timeout)? initialize,
+  // A null timeout leaves negotiation to the client's requestTimeout.
+  Future<void> Function(T client, Duration? timeout)? initialize,
 }) async {
-  final timeout =
-      resolveConnectionTimeout(connectionTimeout, proxied: proxyInfo != null);
   if (requestTimeout != null) checkPositive(requestTimeout, 'requestTimeout');
   checkPositive(closeTimeout, 'closeTimeout');
   final watch = Stopwatch()..start();
   final channel = await conn.connect(
     host,
     port: port,
-    connectionTimeout: timeout,
+    connectionTimeout: connectionTimeout,
+    connectionDeadline: connectionDeadline,
+    proxyHandshakeTimeout: proxyHandshakeTimeout,
     acceptUnverified: acceptUnverified,
     useSSL: useSSL,
     proxyInfo: proxyInfo,
@@ -263,12 +284,15 @@ Future<T> _connectClient<T extends ElectrumClient>(
   T? client;
   try {
     client = create(channel);
-    if (initialize != null) {
+    if (initialize != null && connectionDeadline == null) {
+      await initialize(client, null);
+    } else if (initialize != null) {
       // Negotiation gets what the transport left of the deadline, rather than
       // the request timeout, and its expiry is a connection timeout.
       ConnectionTimeoutException expired() => ConnectionTimeoutException(
-          'Electrum protocol negotiation with $host:$port timed out', timeout);
-      final remaining = timeout - watch.elapsed;
+          'Electrum protocol negotiation with $host:$port timed out',
+          connectionDeadline!);
+      final remaining = connectionDeadline! - watch.elapsed;
       if (remaining <= Duration.zero) throw expired();
       try {
         await initialize(client, remaining);

@@ -35,10 +35,16 @@ const aliveTimerDuration = Duration(seconds: 2);
 /// It is not called on a direct connection when [acceptUnverified] is true
 /// without a [securityContext], which accepts every certificate.
 ///
-/// [connectionTimeout] bounds the entire connection, including TCP, SOCKS
-/// negotiation (when used) and TLS. It defaults to [connectionTimeout] for a
-/// direct connection and to [proxyConnectionTimeout] through a proxy, and must
-/// be positive. An expired attempt releases its socket and throws a
+/// [connectionTimeout] retains its legacy meaning: the direct TCP timeout,
+/// defaulting to five seconds. It does not bound direct TLS and, as before,
+/// is not used through a proxy. [proxyHandshakeTimeout] instead allows each
+/// proxy phase (TCP, greeting, CONNECT and TLS) its own timeout, defaulting to
+/// [proxyConnectionTimeout]. Progress to the next phase starts a fresh timer.
+///
+/// [connectionDeadline] opts into one budget for the entire setup, including
+/// TCP, SOCKS and TLS. There is no overall deadline by default. Phase timeouts
+/// still apply when an overall deadline is set. All supplied limits must be
+/// positive. An expired attempt releases its socket and throws a
 /// [ConnectionTimeoutException]. [aliveTimerDuration] is retained for
 /// compatibility; it does not implement a heartbeat.
 ///
@@ -57,6 +63,8 @@ Future<TransportChannel> connect(
   String host, {
   int port = 50002,
   Duration? connectionTimeout,
+  Duration? connectionDeadline,
+  Duration? proxyHandshakeTimeout,
   Duration aliveTimerDuration = aliveTimerDuration,
   bool acceptUnverified = false,
   bool useSSL = true,
@@ -65,8 +73,17 @@ Future<TransportChannel> connect(
   bool Function(X509Certificate)? onBadCertificate,
   int? maxMessageBytes,
 }) async {
-  final timeout =
-      resolveConnectionTimeout(connectionTimeout, proxied: proxyInfo != null);
+  if (connectionTimeout != null)
+    checkPositive(connectionTimeout, 'connectionTimeout');
+  if (connectionDeadline != null)
+    checkPositive(connectionDeadline, 'connectionDeadline');
+  if (proxyHandshakeTimeout != null)
+    checkPositive(proxyHandshakeTimeout, 'proxyHandshakeTimeout');
+  final proxyTimeout =
+      resolveConnectionTimeout(proxyHandshakeTimeout, proxied: true);
+  final tcpTimeout = proxyInfo == null
+      ? resolveConnectionTimeout(connectionTimeout, proxied: false)
+      : proxyTimeout;
   if (maxMessageBytes != null && maxMessageBytes < 1) {
     throw ArgumentError.value(
         maxMessageBytes, 'maxMessageBytes', 'Must be positive');
@@ -74,10 +91,7 @@ Future<TransportChannel> connect(
   ConnectionTask<RawSocket>? task;
   RawSocket? tcp;
   AbortableRawSocket? tls;
-  var expired = false;
-
-  ConnectionTimeoutException timedOut() => ConnectionTimeoutException(
-      'Electrum connection to $host:$port timed out', timeout);
+  ConnectionTimeoutException? timeoutError;
 
   // The socket is ours throughout, so an abandoned attempt can always release
   // it, even when the other side never hangs up.
@@ -86,6 +100,21 @@ Future<TransportChannel> connect(
     // Fail TLS through its socket so it releases its native state.
     tls?.abort(const SocketException('Electrum connection aborted'));
     tcp?.close().ignore();
+  }
+
+  Never expire(Duration limit, String phase) {
+    final error = timeoutError ??= ConnectionTimeoutException(
+        'Electrum $phase to $host:$port timed out', limit);
+    abort();
+    throw error;
+  }
+
+  Future<T> phase<T>(Future<T> pending, Duration limit, String name) =>
+      pending.timeout(limit, onTimeout: () => expire(limit, name));
+
+  void checkExpired() {
+    final error = timeoutError;
+    if (error != null) throw error;
   }
 
   // As socks_socket did, report a proxied transport's errors as SOCKS errors.
@@ -99,44 +128,68 @@ Future<TransportChannel> connect(
           ? await RawSocket.startConnect(host, port)
           : await RawSocket.startConnect(proxyInfo.host, proxyInfo.port);
       // TCP may finish after the deadline, before we owned the socket.
-      if (expired) task!.cancel();
-      tcp = await task!.socket;
+      if (timeoutError != null) task!.cancel();
+      // As in dart:io and socks_socket, the TCP timer starts once the
+      // ConnectionTask is available. Only an explicit deadline also bounds
+      // the wait for that task (including any host lookup).
+      await phase(
+          task!.socket.then((socket) {
+            tcp = socket;
+            if (timeoutError != null) {
+              socket.close().ignore();
+              checkExpired();
+            }
+          }),
+          tcpTimeout,
+          'TCP connection');
       task = null;
-      if (expired) throw timedOut();
+      checkExpired();
       Stream<RawSocketEvent>? events;
       if (proxyInfo != null) {
         events = await socksConnect(tcp!,
             proxyHost: proxyInfo.host.address,
             proxyPort: proxyInfo.port,
             targetHost: host,
-            targetPort: port);
-        if (expired) throw timedOut();
+            targetPort: port,
+            handshakeTimeout: proxyTimeout,
+            onTimeout: (step) => expire(proxyTimeout, 'SOCKS $step'));
+        checkExpired();
       }
       final RawSocket socket;
       if (useSSL) {
         final transport = tls = AbortableRawSocket(tcp!, events);
         events = null;
         try {
-          socket = await RawSecureSocket.secure(transport,
-              host: host,
-              context: securityContext,
-              // Certificates are always verified through a proxy.
-              onBadCertificate: proxyInfo == null &&
-                      acceptUnverified &&
-                      securityContext == null
-                  ? (_) => true
-                  : onBadCertificate);
+          final securing = RawSecureSocket.secure(transport,
+                  host: host,
+                  context: securityContext,
+                  // Certificates are always verified through a proxy.
+                  onBadCertificate: proxyInfo == null &&
+                          acceptUnverified &&
+                          securityContext == null
+                      ? (_) => true
+                      : onBadCertificate)
+              .then((secured) {
+            if (timeoutError != null) {
+              secured.close().ignore();
+              checkExpired();
+            }
+            return secured;
+          });
+          socket = proxyInfo == null
+              ? await securing
+              : await phase(securing, proxyTimeout, 'proxy TLS handshake');
         } on SocketException catch (error) {
           // socks_socket reported a connection lost during the TLS upgrade as
           // a SOCKS failure too.
-          if (proxyInfo == null || expired) rethrow;
+          if (proxyInfo == null || timeoutError != null) rethrow;
           throw socksConnectionLost(
               proxyInfo.host.address, proxyInfo.port, error);
         }
       } else {
         socket = tcp!;
       }
-      if (expired) throw timedOut();
+      checkExpired();
       // As socks_socket did, a proxied connection closes once the server ends
       // its side and the output accepted before then is sent; a direct one
       // stays half-open, as a dart:io Socket does.
@@ -150,11 +203,10 @@ Future<TransportChannel> connect(
     }
   }
 
-  final channel = await open().timeout(timeout, onTimeout: () {
-    expired = true;
-    abort();
-    throw timedOut();
-  });
+  final opening = open();
+  final channel = connectionDeadline == null
+      ? await opening
+      : await phase(opening, connectionDeadline, 'connection');
   return TransportChannel(_jsonChannel(channel, maxMessageBytes), channel.abort,
       done: channel.done, received: () => channel.received);
 }

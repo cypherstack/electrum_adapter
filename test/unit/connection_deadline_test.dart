@@ -22,7 +22,7 @@ void main() {
     final channel = await connect('electrum.example.invalid',
         port: 50001,
         useSSL: false,
-        connectionTimeout: const Duration(milliseconds: 500),
+        connectionDeadline: const Duration(milliseconds: 500),
         proxyInfo: (host: InternetAddress.loopbackIPv4, port: proxy.port));
     final input = channel.stream.drain<void>();
     await Future<void>.delayed(const Duration(milliseconds: 650));
@@ -33,6 +33,27 @@ void main() {
   });
 
   for (final stage in ['greeting', 'connect', 'tls']) {
+    test('a proxy phase timeout closes a stalled $stage without a deadline',
+        () async {
+      final proxy = SocksProxy(stage);
+      await proxy.start();
+      addTearDown(proxy.stop);
+      const timeout = Duration(milliseconds: 200);
+      await expectLater(
+          connect('electrum.example.invalid',
+              proxyHandshakeTimeout: timeout,
+              useSSL: stage == 'tls',
+              proxyInfo: (
+                host: InternetAddress.loopbackIPv4,
+                port: proxy.port
+              )),
+          throwsA(isA<ConnectionTimeoutException>()
+              .having((e) => e.duration, 'duration', timeout)));
+      await proxy.closed.future.timeout(const Duration(seconds: 1));
+      if (stage == 'greeting') expect(proxy.connectRequests, isEmpty);
+      if (stage == 'tls') expect(proxy.payload, isNotEmpty);
+    });
+
     test('the configured deadline closes a stalled $stage connection',
         () async {
       final proxy = SocksProxy(stage);
@@ -42,7 +63,7 @@ void main() {
       await expectLater(
         connect('electrum.example.invalid',
             port: 50002,
-            connectionTimeout: const Duration(milliseconds: 150),
+            connectionDeadline: const Duration(milliseconds: 150),
             useSSL: stage == 'tls',
             proxyInfo: (host: InternetAddress.loopbackIPv4, port: proxy.port)),
         throwsA(isA<TimeoutException>()),
@@ -54,6 +75,46 @@ void main() {
     });
   }
 
+  test('each proxy phase gets a fresh timeout and ignores the direct TCP limit',
+      () async {
+    final proxy =
+        SocksProxy('none', stepDelay: const Duration(milliseconds: 400));
+    await proxy.start();
+    addTearDown(proxy.stop);
+    final watch = Stopwatch()..start();
+    final channel = await connect('electrum.example.invalid',
+        useSSL: false,
+        connectionTimeout: const Duration(milliseconds: 50),
+        proxyHandshakeTimeout: const Duration(milliseconds: 650),
+        proxyInfo: (host: InternetAddress.loopbackIPv4, port: proxy.port));
+    addTearDown(channel.abort);
+    // Both phases succeeded within their own limit, despite exceeding one
+    // phase's allowance in total. Timers must be cancelled on success too.
+    expect(watch.elapsed, greaterThan(const Duration(milliseconds: 650)));
+    final input = channel.stream.drain<void>();
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    expect(proxy.closed.isCompleted, isFalse);
+    await channel.sink.close();
+    await input;
+    await proxy.closed.future.timeout(const Duration(seconds: 1));
+  });
+
+  test('an explicit total deadline still applies across fresh proxy phases',
+      () async {
+    final proxy =
+        SocksProxy('none', stepDelay: const Duration(milliseconds: 400));
+    await proxy.start();
+    addTearDown(proxy.stop);
+    await expectLater(
+        connect('electrum.example.invalid',
+            useSSL: false,
+            proxyHandshakeTimeout: const Duration(milliseconds: 650),
+            connectionDeadline: const Duration(milliseconds: 650),
+            proxyInfo: (host: InternetAddress.loopbackIPv4, port: proxy.port)),
+        throwsA(isA<ConnectionTimeoutException>()));
+    await proxy.closed.future.timeout(const Duration(seconds: 1));
+  });
+
   test('all proxy phases share one total deadline', () async {
     final proxy =
         SocksProxy('tls', stepDelay: const Duration(milliseconds: 80));
@@ -63,7 +124,7 @@ void main() {
     await expectLater(
       connect('electrum.example.invalid',
           port: 50002,
-          connectionTimeout: const Duration(milliseconds: 200),
+          connectionDeadline: const Duration(milliseconds: 200),
           proxyInfo: (host: InternetAddress.loopbackIPv4, port: proxy.port)),
       throwsA(isA<TimeoutException>()),
     );
@@ -92,7 +153,7 @@ void main() {
         FiroElectrumClient.connect('electrum.example.invalid',
             port: 50001,
             useSSL: false,
-            connectionTimeout: const Duration(milliseconds: 250),
+            connectionDeadline: const Duration(milliseconds: 250),
             proxyInfo: (host: InternetAddress.loopbackIPv4, port: proxy.port)),
         throwsA(isA<TimeoutException>()));
     expect(proxy.payload, isNotEmpty);

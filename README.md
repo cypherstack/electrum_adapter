@@ -22,15 +22,37 @@ void main() async {
 
 ## Deadlines and connection lifecycle
 
-`connectionTimeout` must be positive. It defaults to five seconds for a direct
-connection and to 30 seconds through a proxy (`proxyConnectionTimeout`), and it
-covers the whole setup: TCP, SOCKS negotiation when using a proxy, and TLS.
-`FiroElectrumClient.connect()` and `RavenElectrumClient.connect()` also include
-the initial `server.version` exchange in that budget. An expired attempt throws
-a `ConnectionTimeoutException`, which is both a `TimeoutException` and a
-`SocketException`, and releases its socket even if the server never hangs up.
-`ElectrumClient.connect()` only establishes the transport and does not send
-`server.version`.
+Connection setup keeps the legacy phase timeouts unless you configure them:
+
+- `connectionTimeout` applies only to direct TCP establishment, with its
+  existing five-second default. It does not bound direct TLS or protocol
+  negotiation, and, as before, is ignored through a proxy.
+- `proxyHandshakeTimeout` allows each proxy setup phase its own timeout: TCP
+  to the proxy, the SOCKS greeting, CONNECT and TLS. It defaults to the existing
+  30 seconds **per phase** (`proxyConnectionTimeout`); each phase starts a
+  fresh timer. Increase it for slower proxy connections when needed.
+- `connectionDeadline` is an optional budget for the whole setup, including
+  TCP, SOCKS and TLS. There is **no overall deadline by default**.
+  `FiroElectrumClient.connect()` and `RavenElectrumClient.connect()` also include
+  the initial `server.version` exchange in this budget. Without it, that
+  exchange uses `requestTimeout`, if configured, and otherwise has no deadline.
+  With it, negotiation uses the remaining connection budget instead of
+  `requestTimeout`. `ElectrumClient.connect()` only establishes the transport
+  and does not send `server.version`.
+
+All supplied limits must be positive. Phase limits still apply when a total
+deadline is set: a longer `connectionDeadline` does not increase
+`connectionTimeout` or `proxyHandshakeTimeout`. The five- and 30-second values
+are inherited defaults, not recommendations for slow Internet, VPNs or Tor.
+Choose limits for the application's network policy and expected operations.
+To bound every setup phase, explicitly supply `connectionDeadline` and adjust
+the relevant phase limit too. Without an overall deadline, direct TLS and an
+initial `server.version` with no `requestTimeout` can still wait indefinitely.
+
+An expired setup limit throws a `ConnectionTimeoutException`, which is both a
+`TimeoutException` and a `SocketException`, and releases its socket even if the
+server never hangs up. An initial `server.version` that expires under only
+`requestTimeout` throws a `TimeoutException` and also releases the connection.
 
 All client constructors and connect helpers accept an optional, positive
 `requestTimeout`; without one, requests have no deadline. It applies to each
@@ -44,14 +66,16 @@ batch. Use a longer timeout for operations that legitimately take longer:
 final client = await ElectrumClient.connect(
   host: 'bitcoin.stackwallet.com',
   port: 50002,
-  connectionTimeout: const Duration(seconds: 30),
-  requestTimeout: const Duration(seconds: 60),
+  // Durations chosen by the application for the user's network and workload.
+  connectionTimeout: tcpTimeout,
+  connectionDeadline: setupBudget,
+  requestTimeout: rpcTimeout,
 );
 try {
   final result = await client.requestWithTimeout(
     'blockchain.transaction.get',
     parameters: [transactionId, true],
-    timeout: const Duration(minutes: 5),
+    timeout: transactionLookupTimeout,
   );
   print(result);
 } finally {

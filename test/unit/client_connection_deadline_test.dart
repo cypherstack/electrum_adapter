@@ -29,7 +29,7 @@ void main() {
     // Long enough for a cold start under load to send its hello.
     await expectLater(
         connect('127.0.0.1',
-            port: server.port, connectionTimeout: const Duration(seconds: 1)),
+            port: server.port, connectionDeadline: const Duration(seconds: 1)),
         throwsA(isA<TimeoutException>()));
     expect(receivedHello, isTrue);
     await closed.future.timeout(const Duration(seconds: 1));
@@ -37,18 +37,55 @@ void main() {
 
   for (final kind in ['firo', 'raven']) {
     Future<ElectrumClient> open(JsonServer server,
-            {Duration? requestTimeout}) =>
+            {Duration? connectionDeadline = const Duration(milliseconds: 150),
+            Duration? connectionTimeout,
+            Duration? requestTimeout = const Duration(seconds: 10)}) =>
         kind == 'firo'
             ? FiroElectrumClient.connect('127.0.0.1',
                 port: server.port,
                 useSSL: false,
-                connectionTimeout: const Duration(milliseconds: 150),
-                requestTimeout: requestTimeout ?? const Duration(seconds: 10))
+                connectionTimeout: connectionTimeout,
+                connectionDeadline: connectionDeadline,
+                requestTimeout: requestTimeout)
             : RavenElectrumClient.connect('127.0.0.1',
                 port: server.port,
                 useSSL: false,
-                connectionTimeout: const Duration(milliseconds: 150),
-                requestTimeout: requestTimeout ?? const Duration(seconds: 10));
+                connectionTimeout: connectionTimeout,
+                connectionDeadline: connectionDeadline,
+                requestTimeout: requestTimeout);
+
+    test('$kind has no implicit deadline for server.version', () async {
+      final server = await JsonServer.start();
+      addTearDown(server.close);
+      // Longer than the old five-second overall budget. TCP is already open,
+      // so neither its default nor an explicit TCP timeout may end this RPC.
+      server.onRequest = (request) {
+        final timer = Timer(const Duration(seconds: 6),
+            () => server.reply(request, ['test', '1.4']));
+        addTearDown(timer.cancel);
+      };
+      final client = await open(server,
+          connectionDeadline: null,
+          connectionTimeout: const Duration(seconds: 1),
+          requestTimeout: null);
+      addTearDown(client.close);
+      expect(client.peer.isClosed, isFalse);
+      expect(client.requestTimeout, isNull);
+    });
+
+    test('$kind negotiation honors requestTimeout without a setup deadline',
+        () async {
+      final server = await JsonServer.start();
+      addTearDown(server.close);
+      await expectLater(
+          open(server,
+              connectionDeadline: null,
+              requestTimeout: const Duration(milliseconds: 150)),
+          throwsA(allOf(isA<TimeoutException>(),
+              isNot(isA<ConnectionTimeoutException>()))));
+      expect(server.requests.single['method'], 'server.version');
+      await server.disconnected.future.timeout(const Duration(seconds: 1));
+    });
 
     test('$kind connection deadline includes server.version', () async {
       final server = await JsonServer.start();
@@ -75,12 +112,12 @@ void main() {
           ? FiroElectrumClient.connect('127.0.0.1',
               port: server.port,
               useSSL: false,
-              connectionTimeout: const Duration(seconds: 3),
+              connectionDeadline: const Duration(seconds: 3),
               requestTimeout: const Duration(milliseconds: 100))
           : RavenElectrumClient.connect('127.0.0.1',
               port: server.port,
               useSSL: false,
-              connectionTimeout: const Duration(seconds: 3),
+              connectionDeadline: const Duration(seconds: 3),
               requestTimeout: const Duration(milliseconds: 100)));
       addTearDown(client.close);
       expect(client.peer.isClosed, isFalse);
@@ -159,7 +196,7 @@ void main() {
     await expectLater(
         connect('127.0.0.1',
             port: server.port,
-            connectionTimeout: const Duration(milliseconds: 100)),
+            connectionDeadline: const Duration(milliseconds: 100)),
         throwsA(allOf(isA<ConnectionTimeoutException>(),
             isA<TimeoutException>(), isA<SocketException>())));
   });
@@ -186,7 +223,7 @@ void main() {
     await expectLater(
         connect('127.0.0.1',
             port: server.port,
-            connectionTimeout: const Duration(milliseconds: 150),
+            connectionDeadline: const Duration(milliseconds: 150),
             acceptUnverified: true),
         throwsA(isA<TimeoutException>()));
     await closed.future.timeout(const Duration(seconds: 1));
@@ -637,6 +674,27 @@ void main() {
     for (final timeout in [Duration.zero, const Duration(seconds: -1)]) {
       await expectLater(
           connect('127.0.0.1', port: server.port, connectionTimeout: timeout),
+          throwsArgumentError);
+      await expectLater(
+          connect('127.0.0.1', port: server.port, connectionDeadline: timeout),
+          throwsArgumentError);
+      await expectLater(
+          connect('127.0.0.1',
+              port: server.port, proxyHandshakeTimeout: timeout),
+          throwsArgumentError);
+      await expectLater(
+          ElectrumClient.connect(
+              host: '127.0.0.1',
+              port: server.port,
+              connectionDeadline: timeout),
+          throwsArgumentError);
+      await expectLater(
+          FiroElectrumClient.connect('127.0.0.1',
+              port: server.port, proxyHandshakeTimeout: timeout),
+          throwsArgumentError);
+      await expectLater(
+          RavenElectrumClient.connect('127.0.0.1',
+              port: server.port, connectionDeadline: timeout),
           throwsArgumentError);
       await expectLater(
           ElectrumClient.connect(

@@ -1,12 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 
-/// Default deadline for a direct connection: TCP and TLS.
+/// Legacy timeout for establishing direct TCP. It does not bound TLS or RPCs.
 const connectionTimeout = Duration(seconds: 5);
 
-/// Default deadline for a connection through a SOCKS5 proxy: TCP to the proxy,
-/// SOCKS negotiation, the proxy reaching the server, and TLS. A Tor proxy may
-/// first have to build a circuit.
+/// Legacy timeout for each proxy setup phase separately: TCP to the proxy,
+/// the SOCKS greeting, CONNECT, and TLS. This is not an overall deadline.
 const proxyConnectionTimeout = Duration(seconds: 30);
 
 /// Thrown when an Electrum connection attempt does not finish within its
@@ -25,8 +24,8 @@ class ConnectionTimeoutException extends SocketException
   String toString() => 'ConnectionTimeoutException after $duration: $message';
 }
 
-/// The deadline for a connection attempt: [timeout] when given, otherwise the
-/// default for a direct or [proxied] connection.
+/// A setup phase's timeout: [timeout] when given, otherwise the legacy direct
+/// TCP or proxy phase timeout. This never supplies an overall deadline.
 Duration resolveConnectionTimeout(Duration? timeout, {required bool proxied}) {
   final resolved =
       timeout ?? (proxied ? proxyConnectionTimeout : connectionTimeout);

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:async/async.dart';
+import 'package:electrum_adapter/src/connection_timeout.dart';
 import 'package:socks_socket/socks_socket.dart';
 
 /// Asks the SOCKS5 proxy connected through [socket] to connect to
@@ -12,22 +13,36 @@ import 'package:socks_socket/socks_socket.dart';
 /// owner to listen to; bytes after the proxy's reply stay unread. Failures are
 /// reported with socks_socket's exception types. The caller owns [socket] and
 /// closes it on failure; closing it also ends a negotiation in progress.
+/// [handshakeTimeout] applies separately to the greeting and CONNECT exchange,
+/// preserving socks_socket's per-step timeout. [onTimeout] lets the owner
+/// abort immediately and supply its connection timeout error.
 Future<Stream<RawSocketEvent>> socksConnect(
   RawSocket socket, {
   required String proxyHost,
   required int proxyPort,
   required String targetHost,
   required int targetPort,
+  Duration handshakeTimeout = proxyConnectionTimeout,
+  void Function(String phase)? onTimeout,
 }) async {
+  checkPositive(handshakeTimeout, 'proxyHandshakeTimeout');
   final request = _encodeConnect(targetHost, targetPort);
   final io = _HandshakeIo(socket);
+  Future<T> step<T>(String name, Future<T> Function() action) =>
+      action().timeout(handshakeTimeout, onTimeout: () {
+        io.stop();
+        onTimeout?.call(name);
+        throw TimeoutException('SOCKS5 $name timed out', handshakeTimeout);
+      });
   Never handshakeFailed(String reason) => throw SocksHandshakeException(
       proxyHost: proxyHost,
       proxyPort: proxyPort,
       message: 'SOCKS5 handshake failed: $reason');
   try {
-    await io.write(const [5, 1, 0]);
-    final greeting = await io.read(2);
+    final greeting = await step('greeting', () async {
+      await io.write(const [5, 1, 0]);
+      return io.read(2);
+    });
     if (greeting[0] != 5) handshakeFailed('invalid reply version');
     if (greeting[1] != 0) {
       handshakeFailed('proxy rejected authentication method');
@@ -35,16 +50,19 @@ Future<Stream<RawSocketEvent>> socksConnect(
     if (socket.available() > 0) {
       handshakeFailed('reply has unexpected trailing data');
     }
-    await io.write(request);
-    final reply = await io.read(4);
-    var length = _replyLength(reply);
-    if (length == null) {
-      reply.addAll(await io.read(1));
-      length = _replyLength(reply);
-    }
-    if (length != null && length > reply.length) {
-      reply.addAll(await io.read(length - reply.length));
-    }
+    final (reply, length) = await step('CONNECT', () async {
+      await io.write(request);
+      final reply = await io.read(4);
+      var length = _replyLength(reply);
+      if (length == null) {
+        reply.addAll(await io.read(1));
+        length = _replyLength(reply);
+      }
+      if (length != null && length > reply.length) {
+        reply.addAll(await io.read(length - reply.length));
+      }
+      return (reply, length);
+    });
     if (length == null || length < 0) {
       throw SocksHandshakeException(
           proxyHost: proxyHost,
@@ -65,6 +83,8 @@ Future<Stream<RawSocketEvent>> socksConnect(
               'target: $targetHost:$targetPort, reply: $description)');
     }
     return io.release();
+  } on TimeoutException {
+    rethrow;
   } on SocketException catch (error) {
     throw socksConnectionLost(proxyHost, proxyPort, error);
   }
@@ -159,6 +179,12 @@ class _HandshakeIo {
     final waiter = _waiter;
     _waiter = null;
     waiter?.complete();
+  }
+
+  /// Prevents a timed-out exchange from continuing when a late reply arrives.
+  void stop() {
+    _ended = true;
+    _wake();
   }
 
   Future<void> _next() => (_waiter ??= Completer<void>()).future;
