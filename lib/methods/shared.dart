@@ -1,4 +1,5 @@
 import 'package:electrum_adapter/electrum_adapter.dart';
+import 'package:electrum_adapter/src/connection_timeout.dart';
 
 extension SharedMethods on ElectrumClient {
   Future<dynamic> ping() async => await request('server.ping');
@@ -10,30 +11,39 @@ extension SharedMethods on ElectrumClient {
   ///
   /// Sends [clientName] and [protocolVersion] when given; without a
   /// [protocolVersion] the server uses its default, 1.4 on current ElectrumX.
+  /// [timeout] replaces the client's request timeout for this call.
   Future<List<String>> serverVersion(
-      {String? clientName, String? protocolVersion}) async {
+      {String? clientName, String? protocolVersion, Duration? timeout}) async {
     final params = [
       if (clientName != null || protocolVersion != null) clientName ?? '',
       if (protocolVersion != null) protocolVersion,
     ];
-    final reply =
-        await request('server.version', params.isEmpty ? null : params)
-            as List<dynamic>;
+    final reply = await requestWithTimeout('server.version',
+        parameters: params.isEmpty ? null : params,
+        timeout: timeout) as List<dynamic>;
     return reply.cast<String>();
   }
 
-  Future<String> broadcastTransaction(String rawTx) async => await request(
-        'blockchain.transaction.broadcast',
-        [rawTx],
-      ) as String;
+  /// Broadcasts [rawTx] and returns its hash. [timeout] replaces the client's
+  /// [requestTimeout] for this call. Data that the operating system or a proxy
+  /// such as Tor
+  /// has buffered while sending counts against it, so on a slow link give a
+  /// large transaction longer.
+  Future<String> broadcastTransaction(String rawTx,
+          {Duration? timeout}) async =>
+      await requestWithTimeout('blockchain.transaction.broadcast',
+          parameters: [rawTx], timeout: timeout) as String;
 
   /// returns transaction hashs as hexadecimal strings in the same order as rawTxs passed in
-  Future<List<String>> broadcastTransactions(List<String> rawTxs) async {
+  Future<List<String>> broadcastTransactions(List<String> rawTxs,
+      {Duration? timeout}) async {
+    // Before the batch, so that no member is made only to fail.
+    if (timeout != null) checkPositive(timeout, 'timeout');
     var futures = <Future<String>>[];
     if (rawTxs.isNotEmpty) {
       peer.withBatch(() {
         for (var rawTx in rawTxs) {
-          futures.add(broadcastTransaction(rawTx));
+          futures.add(broadcastTransaction(rawTx, timeout: timeout));
         }
       });
     }

@@ -1,16 +1,43 @@
 import 'package:electrum_adapter/electrum_adapter.dart';
 
+/// The shortest response deadline, on a client with a `requestTimeout`, for
+/// Firo calls that can return a whole anonymity set or list of spent serials,
+/// which a server may take minutes to build.
+///
+/// A client whose own `requestTimeout` is longer uses that, and a client
+/// without one sets no deadline. Each such call also takes a `timeout` for
+/// that call alone. It expires like any other request deadline: see
+/// [FiroElectrumClient.requestWithTimeout].
+const firoSetRequestTimeout = Duration(minutes: 2);
+
+extension _SetRequest on FiroElectrumClient {
+  Future<dynamic> _setRequest(
+      String method, List<dynamic> parameters, Duration? timeout) {
+    final clientDeadline = requestTimeout;
+    final deadline = timeout ??
+        (clientDeadline == null || clientDeadline > firoSetRequestTimeout
+            ? clientDeadline
+            : firoSetRequestTimeout);
+    return requestWithTimeout(method,
+        parameters: parameters, timeout: deadline);
+  }
+}
+
 extension SparkMethods on FiroElectrumClient {
   /// Takes [startNumber], if it is 0, we get the full set,
-  /// otherwise the used tags after that number
+  /// otherwise the used tags after that number.
+  ///
+  /// [timeout] defaults as described for [firoSetRequestTimeout].
   Future<Map<String, dynamic>> getUsedCoinsTags({
     required int startNumber,
+    Duration? timeout,
   }) async {
-    return await request(
+    return await _setRequest(
       'spark.getusedcoinstags',
       [
         "$startNumber",
       ],
+      timeout,
     ) as Map<String, dynamic>;
   }
 
@@ -23,16 +50,20 @@ extension SparkMethods on FiroElectrumClient {
   /// Returns blockHash (last block hash),
   /// setHash (hash of current set)
   /// and coins (the list of pairs serialized coin and tx hash)
+  ///
+  /// [timeout] defaults as described for [firoSetRequestTimeout].
   Future<Map<String, dynamic>> getSparkAnonymitySet({
     String coinGroupId = "1",
     String startBlockHash = "",
+    Duration? timeout,
   }) async {
-    return await request(
+    return await _setRequest(
       'spark.getsparkanonymityset',
       [
         coinGroupId,
         startBlockHash,
       ],
+      timeout,
     ) as Map<String, dynamic>;
   }
 
@@ -84,16 +115,20 @@ extension LelantusMethods on FiroElectrumClient {
   ///               [dynamic list of length 4],
   ///         ]
   ///   }
+  ///
+  /// [timeout] defaults as described for [firoSetRequestTimeout].
   Future<Map<String, dynamic>> getLelantusAnonymitySet({
     String groupId = "1",
     String blockHash = "",
+    Duration? timeout,
   }) async {
-    final response = await request(
+    final response = await _setRequest(
       'lelantus.getanonymityset',
       [
         groupId,
         blockHash,
       ],
+      timeout,
     );
     return Map<String, dynamic>.from(response as Map);
   }
@@ -114,16 +149,18 @@ extension LelantusMethods on FiroElectrumClient {
 
   //TODO add example to docs
   /// Returns the whole set of the used Lelantus coin serials.
+  ///
+  /// [timeout] defaults as described for [firoSetRequestTimeout].
   Future<Map<String, dynamic>> getLelantusUsedCoinSerials({
     required int startNumber,
+    Duration? timeout,
   }) async {
-    final response = await request(
+    final response = await _setRequest(
       'lelantus.getusedcoinserials',
       [
         "$startNumber",
       ],
-      // requestTimeout: const Duration(minutes: 2),
-      // TODO alter request to accept a timeout param.
+      timeout,
     );
 
     return Map<String, dynamic>.from(response as Map);

@@ -12,19 +12,23 @@ extension ServerVersionMethod on RavenElectrumClient {
   /// when [minProtocolVersion] is null.
   ///
   /// A range suits both server lines: current ElectrumX Ravencoin speaks 1.4
-  /// to 1.11 but rejects 1.9, and older releases stop at 1.9.
+  /// to 1.11 but rejects 1.9, and older releases stop at 1.9. [timeout]
+  /// replaces the client's request timeout for this call.
   Future<ServerVersion> serverVersion({
     String clientName = 'RavenElectrumClient',
     String? minProtocolVersion = '1.4',
     String protocolVersion = '1.10',
+    Duration? timeout,
   }) async {
     var proc = 'server.version';
-    var response = await request(proc, [
-      clientName,
-      minProtocolVersion == null || minProtocolVersion == protocolVersion
-          ? protocolVersion
-          : [minProtocolVersion, protocolVersion],
-    ]);
+    var response = await requestWithTimeout(proc,
+        parameters: [
+          clientName,
+          minProtocolVersion == null || minProtocolVersion == protocolVersion
+              ? protocolVersion
+              : [minProtocolVersion, protocolVersion],
+        ],
+        timeout: timeout);
     return ServerVersion(response[0] as String, response[1] as String);
   }
 }
