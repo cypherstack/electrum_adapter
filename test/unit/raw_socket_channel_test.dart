@@ -188,6 +188,23 @@ void main() {
     expect(socket.closed, isTrue);
   });
 
+  test('a protocol abort fails blocked output with its original error',
+      () async {
+    final socket = _Socket()..blocked = true;
+    final channel = open(socket);
+    final error = FormatException('message too large');
+    final adding = channel.sink.addStream(Stream.value([1, 2, 3]));
+    final failed = expectLater(adding, throwsA(same(error)));
+    await socket.attempted.future;
+    channel.abort(error);
+    await channel.done.timeout(const Duration(seconds: 1));
+    await failed.timeout(const Duration(seconds: 1));
+    await expectLater(channel.sink.done, throwsA(same(error)));
+    await expectLater(channel.sink.close(), throwsA(same(error)));
+    expect(socket.closed, isTrue);
+    expect(socket.written, isEmpty);
+  });
+
   test('a synchronous read failure reaches the stream and closes the transport',
       () async {
     final socket = _Socket();

@@ -151,12 +151,35 @@ void main() {
     for (final proxied in [false, true]) {
       final path = proxied ? 'through a proxy' : 'directly';
 
-      Future<TransportChannel> open() async => await connect('localhost',
-          port: recorder.port,
-          securityContext: trusting(),
-          proxyInfo: proxied
-              ? (host: InternetAddress.loopbackIPv4, port: proxy.port)
-              : null);
+      Future<TransportChannel> open({int? maxMessageBytes}) async =>
+          await connect('localhost',
+              port: recorder.port,
+              securityContext: trusting(),
+              maxMessageBytes: maxMessageBytes,
+              proxyInfo: proxied
+                  ? (host: InternetAddress.loopbackIPv4, port: proxy.port)
+                  : null);
+
+      test(
+          'an oversized message releases raw TLS and preserves its error $path',
+          () async {
+        recorder.onRequest = (request) => recorder.reply(request, 'x' * 1000);
+        addTearDown(() => recorder.onRequest = null);
+        final transport = await open(maxMessageBytes: 100);
+        addTearDown(transport.abort);
+        final ended = expectLater(
+            transport.stream,
+            emitsInOrder([
+              emitsError(isA<MessageTooLargeException>()),
+              emitsDone,
+            ]));
+        transport.sink.add({'jsonrpc': '2.0', 'id': 0, 'method': 'large'});
+        await ended.timeout(const Duration(seconds: 2));
+        await transport.done.timeout(const Duration(seconds: 1));
+        await recorder.disconnected.future.timeout(const Duration(seconds: 2));
+        await expectLater(
+            transport.sink.done, throwsA(isA<MessageTooLargeException>()));
+      });
 
       test('close still sends a notification queued just before it $path',
           () async {

@@ -127,9 +127,14 @@ channel, pass it through the original's `withChannel`:
 line from the server is one JSON message: lines that are not JSON are skipped,
 and invalid UTF-8 is replaced; each line is decoded as it arrives, so a large
 reply is never also held as one string. `maxMessageBytes`, on `connect()` and
-the connect helpers, limits the size of one message: a longer one is skipped
-and reported as a `MessageTooLargeException`, on which a client closes. There
-is no limit by default.
+the connect helpers, limits the bytes in one line, excluding the newline.
+Once decoding detects a longer line, even an unfinished or malformed one,
+the transport is aborted and queued output is discarded. The stream reports
+one `MessageTooLargeException` and ends without delivering later messages;
+pending writes fail with the same error through `sink.done`. The socket is
+released even if the listener pauses or cancels while decoding that input;
+stream errors are not delivered after cancellation or closing the sink.
+There is no size limit by default.
 Closing a channel's sink ends its stream at once, sends queued output and
 shuts down sending; the connection closes once the server closes its side, or
 at once with `abort()`. A channel's stream can be listened to once.

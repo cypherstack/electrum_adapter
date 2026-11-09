@@ -50,9 +50,9 @@ const aliveTimerDuration = Duration(seconds: 2);
 ///
 /// Each line from the server is one JSON message, decoded as it arrives;
 /// lines that are not JSON are skipped, and invalid UTF-8 is replaced. When
-/// [maxMessageBytes] is given, a longer line is skipped and reported on the
-/// stream as a [MessageTooLargeException], on which a client closes; there is
-/// no limit by default.
+/// [maxMessageBytes] is given, detecting a longer line aborts the transport
+/// and reports a [MessageTooLargeException]. No later messages are delivered;
+/// pending output is discarded. There is no limit by default.
 ///
 /// Closing the channel's sink ends its stream at once, sends queued output and
 /// then shuts down sending; the connection closes once the server closes its
@@ -212,8 +212,8 @@ Future<TransportChannel> connect(
 }
 
 /// Reported through a channel's stream when a line from the server is longer
-/// than its `maxMessageBytes`. The line is skipped; a client closes on this
-/// error.
+/// than its `maxMessageBytes`. The transport is aborted and no later messages
+/// are delivered. Pending writes fail with this error too.
 class MessageTooLargeException implements Exception {
   /// The limit, in bytes.
   final int limit;
@@ -233,10 +233,10 @@ class MessageTooLargeException implements Exception {
 /// dropped. (stream_channel's own close guarantee would report such an error
 /// as uncaught.)
 StreamChannel<dynamic> _jsonChannel(
-    StreamChannel<List<int>> channel, int? maxMessageBytes) {
+    RawSocketChannel channel, int? maxMessageBytes) {
   var closed = false;
   final stream = Stream<dynamic>.eventTransformed(channel.stream,
-          (messages) => _JsonLineSink(messages, maxMessageBytes))
+          (messages) => _JsonLineSink(messages, maxMessageBytes, channel.abort))
       .transform(StreamTransformer<dynamic, dynamic>.fromHandlers(
           handleData: (message, sink) {
     if (!closed) sink.add(message);
@@ -256,41 +256,50 @@ StreamChannel<dynamic> _jsonChannel(
 
 /// Decodes each line of bytes as one JSON message while it arrives, so a large
 /// message is never also held as a string. Lines that are not JSON, including
-/// blank ones, are skipped, as json_rpc_2 does. A line longer than [_limit] is
-/// skipped too, and reported as a [MessageTooLargeException].
+/// blank ones, are skipped, as json_rpc_2 does. A line longer than [_limit]
+/// permanently stops decoding and fails the transport.
 class _JsonLineSink implements EventSink<List<int>> {
   final EventSink<dynamic> _messages;
   final int? _limit;
+  final void Function(Object, StackTrace) _abort;
   ByteConversionSink? _line;
   int _lineBytes = 0;
   bool _skipping = false;
+  bool _failed = false;
 
-  _JsonLineSink(this._messages, this._limit);
+  _JsonLineSink(this._messages, this._limit, this._abort);
 
   @override
   void add(List<int> bytes) {
     var start = 0;
-    while (true) {
+    while (!_failed) {
       final end = bytes.indexOf(0x0A, start);
       _feed(bytes, start, end < 0 ? bytes.length : end);
-      if (end < 0) return;
+      if (_failed || end < 0) return;
       _endLine();
       start = end + 1;
     }
   }
 
   void _feed(List<int> bytes, int start, int end) {
-    if (start == end || _skipping) return;
+    if (start == end) return;
     final limit = _limit;
     if (limit != null) {
       _lineBytes += end - start;
       if (_lineBytes > limit) {
         _line = null;
-        _skipping = true;
-        _messages.addError(MessageTooLargeException(limit));
+        _failed = true;
+        final error = MessageTooLargeException(limit);
+        final stack = StackTrace.current;
+        // Record the cause and release the socket before invoking listeners,
+        // which may pause, cancel or close while handling the error. Transport
+        // shutdown must not wait for a paused stream to deliver that error.
+        _abort(error, stack);
+        _messages.addError(error, stack);
         return;
       }
     }
+    if (_skipping) return;
     try {
       (_line ??= const Utf8Decoder(allowMalformed: true).startChunkedConversion(
               const JsonDecoder().startChunkedConversion(
@@ -321,7 +330,7 @@ class _JsonLineSink implements EventSink<List<int>> {
 
   @override
   void close() {
-    _endLine();
+    if (!_failed) _endLine();
     _messages.close();
   }
 }

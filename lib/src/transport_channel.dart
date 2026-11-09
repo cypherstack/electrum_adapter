@@ -258,8 +258,12 @@ class RawSocketChannel extends StreamChannelMixin<List<int>> {
     if (!_sent.isCompleted) _sent.complete();
   }
 
-  void abort() {
+  /// Releases the socket immediately. [error] records a protocol failure for
+  /// pending writes; the protocol layer reports it on its own input stream.
+  void abort([Object? error, StackTrace? stack]) {
     if (_closed) return;
+    _error ??= error;
+    if (error != null) _errorStack ??= stack ?? StackTrace.current;
     _closed = true;
     _abortSocket();
     _events.cancel().ignore();
@@ -272,12 +276,12 @@ class RawSocketChannel extends StreamChannelMixin<List<int>> {
       _error = _mapped(const SocketException('Connection closed'));
       _errorStack = StackTrace.current;
     }
-    final error = _error;
+    final failure = _error;
     if (!_sent.isCompleted) {
-      if (error == null) {
+      if (failure == null) {
         _sent.complete();
       } else {
-        _sent.completeError(error, _errorStack);
+        _sent.completeError(failure, _errorStack);
       }
     }
     if (!_input.isClosed) _input.close().ignore();
