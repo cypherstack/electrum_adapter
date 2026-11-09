@@ -198,8 +198,7 @@ void main() {
         ]);
   });
 
-  test('a reply arriving with the proxy closing raises no stray errors',
-      () async {
+  test('a reply followed by graceful proxy EOF reaches its caller', () async {
     final proxy = await _replyThenClose();
     addTearDown(proxy.stop);
     final channel = await connect('electrum.example.invalid',
@@ -217,6 +216,49 @@ void main() {
     await client.done.then((_) {}, onError: (Object error) {
       expect(error, isA<SocksConnectionException>());
     });
+  });
+
+  test(
+      'a reply immediately followed by a proxy reset may be lost but never hangs',
+      () async {
+    final linger = resetOption();
+    if (linger == null) {
+      markTestSkipped('Cannot force a reset on this platform');
+      return;
+    }
+    final proxy = SocksProxy('none');
+    await proxy.start();
+    addTearDown(proxy.stop);
+    proxy.onPayload = (peer, _) {
+      if (!proxy.payload.contains(10)) return;
+      proxy.onPayload = null;
+      peer.setRawOption(linger);
+      peer.write('{"jsonrpc":"2.0","id":0,"result":"r0"}\n');
+      // Deliberately do not flush: a reset can discard the reply before it
+      // reaches the client. Unlike graceful EOF, losing that reply is allowed.
+      peer.destroy();
+    };
+    final transport = await connect('electrum.example.invalid',
+        port: 50001,
+        useSSL: false,
+        proxyInfo: (host: InternetAddress.loopbackIPv4, port: proxy.port));
+    addTearDown(transport.abort);
+    final client = BaseClient(transport);
+    addTearDown(client.close);
+    final first = client.request('first').then<Object?>(
+        (dynamic value) => value,
+        onError: (Object error) => error);
+    final second = expectLater(client.request('second'), throwsStateError);
+    await expectLater(client.done, throwsA(isA<SocksConnectionException>()))
+        .timeout(const Duration(seconds: 2));
+    // Either the intact reply arrived before the reset, or the request failed
+    // with the connection. The unanswered request must fail in either case.
+    expect(await first.timeout(const Duration(seconds: 1)),
+        anyOf('r0', isA<StateError>()));
+    await second.timeout(const Duration(seconds: 1));
+    await transport.done.timeout(const Duration(seconds: 1));
+    expect(client.peer.isClosed, isTrue);
+    await expectLater(client.request('later'), throwsStateError);
   });
 
   test('a proxy reset fails pending requests and reports its error in done',

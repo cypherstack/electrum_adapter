@@ -127,6 +127,39 @@ void main() {
     expect(await pending, 'late but allowed');
   });
 
+  test('one delayed batch response honors every caller-supplied deadline',
+      () async {
+    final pending = <Future<dynamic>>[];
+    client.peer.withBatch(() {
+      for (final method in ['first', 'second']) {
+        pending.add(client.requestWithTimeout(method,
+            timeout: const Duration(seconds: 2)));
+      }
+    });
+    final results = Future.wait(pending);
+    results.ignore();
+    // The server sends nothing until the whole batch is ready. The client's
+    // 100 ms default must not close it before the callers' longer deadlines.
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(server.messages, hasLength(1));
+    expect(server.messages.single, isA<List<dynamic>>());
+    expect(requests.map((request) => request['method']), ['first', 'second']);
+    expect(client.peer.isClosed, isFalse);
+    // One JSON-RPC array, not individual replies. Reverse the results so the
+    // client must match each response by id rather than by its array position.
+    server.sink.add([
+      for (final request in requests.reversed)
+        {
+          'jsonrpc': '2.0',
+          'id': request['id'],
+          'result': '${request['method']} result',
+        },
+    ]);
+    expect(await results.timeout(const Duration(seconds: 1)),
+        ['first result', 'second result']);
+    expect(client.peer.isClosed, isFalse);
+  });
+
   test('one omitted batch reply fails only that member', () async {
     server.respond = (request) {
       if (request['method'] == 'answers') reply(request, 'ok');
